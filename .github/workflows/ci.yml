@@ -1,0 +1,52 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  backend:
+    name: Backend · 数据管线 + 验收用例
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        run: uv sync --group dev
+      - name: Lint (ruff)
+        run: uv run ruff check backend scripts data/simulator
+      - name: Build knowledge base
+        run: uv run python -m scripts.build_kb
+      - name: Generate simulated data (30d)
+        run: uv run python -m data.simulator.gen --days 30
+      - name: Load demo business data
+        run: uv run python -m scripts.load_demo
+      - name: Knowledge quality gate
+        run: uv run python -m scripts.quality_check --strict
+      - name: Train predictive models (simulated)
+        run: uv run python -m scripts.train_models
+      - name: Acceptance tests (pytest)
+        run: uv run pytest -q
+
+  frontend:
+    name: Frontend · 类型 + Lint + 构建
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install dependencies
+        run: npm ci
+      - name: Typecheck & lint
+        run: |
+          npm run typecheck
+          npm run lint
+      - name: Build
+        run: npm run build

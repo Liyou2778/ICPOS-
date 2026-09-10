@@ -1,0 +1,13 @@
+code,brand,series,model_name,category,category_cn,scene,price_cny,rated_load_t,bucket_m3,power_kw,fuel_lh,maintain_yearly_cny,lifespan_years,residual_ratio_3y,spec,data_note,source
+XE215,徐工,XE系列,21.5吨级履带式液压挖掘机,excavator,挖掘机,earthwork,980000,0,1.0,128,15,78000,10,0.55,cycle_sec=28;eff=0.82;avail=0.85;load_pass_min=0.42,示例数据（公开资料近似）,徐工官网/产品手册（公开渠道）
+XE305,徐工,XE系列,30吨级履带式液压挖掘机,excavator,挖掘机,earthwork,1500000,0,1.8,180,20,115000,10,0.56,cycle_sec=30;eff=0.82;avail=0.85;load_pass_min=0.42,示例数据（公开资料近似）,徐工官网/产品手册（公开渠道）
+XE490,徐工,XE系列,49吨级矿山型液压挖掘机,excavator,挖掘机,mining,2650000,0,4.5,260,32,210000,12,0.58,cycle_sec=32;eff=0.83;avail=0.87;load_pass_min=0.45,示例数据（公开资料近似）,徐工官网/产品手册（公开渠道）
+XE700,徐工,XE系列,70吨级矿山型液压挖掘机,excavator,挖掘机,mining,4300000,0,6.0,340,46,340000,12,0.60,cycle_sec=34;eff=0.84;avail=0.87;load_pass_min=0.48,示例数据（公开资料近似）,徐工官网/产品手册（公开渠道）
+XE370,徐工,XE系列,37吨级土方型液压挖掘机,excavator,挖掘机,earthwork,1950000,0,2.4,220,26,150000,11,0.57,cycle_sec=30;eff=0.82;avail=0.86;load_pass_min=0.44,示例数据（公开资料近似）,徐工官网/产品手册（公开渠道）
+XDR80,徐工,XDR系列,80吨级非公路自卸车,mining_truck,矿用自卸车,mining,4000000,80,0,560,42,360000,12,0.60,avail=0.85;dump_min=2;haul_speed_kmh=22;return_speed_kmh=28;fixed_cycle_min=5;spot_min=1.5,示例数据（公开资料近似）,徐工官网/产品手册（公开渠道）
+XDR90,徐工,XDR系列,90吨级非公路自卸车,mining_truck,矿用自卸车,mining,4700000,90,0,620,46,420000,12,0.60,avail=0.85;dump_min=2;haul_speed_kmh=24;return_speed_kmh=30;fixed_cycle_min=5;spot_min=1.5,示例数据（公开资料近似）,徐工官网/产品手册（公开渠道）
+XDE130,徐工,XDE系列,130吨级电传动自卸车,mining_truck,矿用自卸车,mining,7800000,130,0,880,58,680000,15,0.62,avail=0.87;dump_min=2.5;haul_speed_kmh=28;return_speed_kmh=34;fixed_cycle_min=5;spot_min=2,示例数据（公开资料近似）,徐工官网/产品手册（公开渠道）
+XDR60,徐工,XDR系列,60吨级非公路自卸车,mining_truck,矿用自卸车,earthwork,3200000,60,0,430,34,290000,12,0.58,avail=0.85;dump_min=2;haul_speed_kmh=20;return_speed_kmh=26;fixed_cycle_min=5;spot_min=1.5,示例数据（公开资料近似）,徐工官网/产品手册（公开渠道）
+XC956,徐工,XC系列,5吨级轮式装载机,loader,装载机,earthwork,420000,0,3.0,162,18,36000,10,0.50,cycle_sec=26;eff=0.80;avail=0.85;load_pass_min=0.5,示例数据（公开资料近似）,徐工官网/产品手册（公开渠道）
+D170,徐工,推土机系列,170马力履带式推土机,dozer,推土机,earthwork,1650000,0,0,132,22,130000,10,0.50,prod_m3h=320;avail=0.85,示例数据（公开资料近似）,徐工官网/产品手册（公开渠道）
+XE335,徐工,XE系列,33.5吨级液压挖掘机,excavator,挖掘机,agriculture,1780000,0,2.0,200,24,140000,11,0.57,cycle_sec=29;eff=0.82;avail=0.85;load_pass_min=0.43,示例数据（公开资料近似）,徐工官网/产品手册（公开渠道）

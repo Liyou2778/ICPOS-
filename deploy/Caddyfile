@@ -1,0 +1,29 @@
+# 智工云枢（ICOPS）MVP Caddy 网关配置（自动 HTTPS + 反代，附录 A 相关命令）
+# 演示环境使用说明：
+#   1) 域名方式：把 icops.example.com 替换为实际域名（需 DNS 指向演示服务器）
+#   2) 无域名直连：使用 :80 入口即可，HTTPS 可省略
+:80 {
+    @api path /api/*
+    handle @api {
+        reverse_proxy backend:8000
+    }
+    handle {
+        reverse_proxy frontend:80
+    }
+
+    header {
+        X-Content-Type-Options nosniff
+        X-Frame-Options SAMEORIGIN
+    }
+    encode gzip
+    log {
+        output stdout
+        format console
+    }
+}
+
+# 域名 HTTPS 示例（注释保留，实际部署时启用并替换域名）：
+# icops.example.com {
+#     reverse_proxy /api/* backend:8000
+#     reverse_proxy /* frontend:80
+# }

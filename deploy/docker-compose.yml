@@ -1,0 +1,65 @@
+# 智工云枢（ICOPS）MVP 单机容器化编排（第八章 8.1 部署架构）
+# 说明：MVP 演示环境 = 单机 Docker Compose。
+#       本地开发时无需整套编排（除向量库/可观测外均可进程内运行），
+#       完整服务编排供演示服务器（阿里云/腾讯云轻量 4C8G）部署参考。
+services:
+  backend:
+    image: icops/backend:V1.0
+    build:
+      context: ..
+      dockerfile: deploy/backend.Dockerfile
+    env_file:
+      - .env
+    environment:
+      - APP_ENV=demo
+    volumes:
+      - ./data:/app/data            # SQLite、向量库、上传文档持久化
+    depends_on:
+      - vector
+    ports:
+      - "8000:8000"
+    restart: unless-stopped
+
+  frontend:
+    image: icops/frontend:V1.0      # 前端静态资源（本期后端任务不构建，占位）
+    build:
+      context: ..
+      dockerfile: deploy/frontend.Dockerfile
+    restart: unless-stopped
+    depends_on:
+      - backend
+
+  vector:
+    image: ghcr.io/chroma-core/chroma:latest
+    volumes:
+      - chroma-data:/data
+    restart: unless-stopped
+
+  langfuse:                          # 可观测组件（可选，演示期可不启动）
+    image: langfuse/langfuse:2
+    profiles: ["observability"]
+    environment:
+      - DATABASE_URL=postgresql://langfuse:langfuse@langfuse-db:5432/langfuse
+      - NEXTAUTH_URL=http://localhost:3000
+      - NEXTAUTH_SECRET=change-me
+      - SALT=change-me
+    ports:
+      - "3000:3000"
+    profiles: ["observability"]
+
+  caddy:
+    image: caddy:2
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+    restart: unless-stopped
+    depends_on:
+      - backend
+      - frontend
+
+volumes:
+  chroma-data:
+  caddy-data:

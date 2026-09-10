@@ -1,0 +1,34 @@
+"""注册全部 ORM 模型，供 Base.metadata.create_all 建表。"""
+
+from backend.app.models.customer import Contract, Customer
+from backend.app.models.device import Device, EquipmentModel, SparePart
+from backend.app.models.dispatch import DispatchLog, DispatchOrder, DispatchPlan
+from backend.app.models.knowledge import KnowledgeEntry, SolutionDocument
+from backend.app.models.maintenance import FaultCode, MaintenancePlan, Warning, WorkOrder
+from backend.app.models.project import Project, Task, TaskProgress
+from backend.app.models.system import ChatMessage, ChatSession, DailyCost, LLMCallLog, User
+
+__all__ = [
+    "ChatMessage",
+    "ChatSession",
+    "Contract",
+    "Customer",
+    "DailyCost",
+    "Device",
+    "DispatchLog",
+    "DispatchOrder",
+    "DispatchPlan",
+    "EquipmentModel",
+    "FaultCode",
+    "KnowledgeEntry",
+    "LLMCallLog",
+    "MaintenancePlan",
+    "Project",
+    "SolutionDocument",
+    "SparePart",
+    "Task",
+    "TaskProgress",
+    "User",
+    "Warning",
+    "WorkOrder",
+]
