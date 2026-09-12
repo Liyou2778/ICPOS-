@@ -18,6 +18,7 @@ from backend.app.agents.maintenance import maintenance_agent
 from backend.app.agents.solution import solution_agent
 from backend.app.models import ChatSession, Device, KnowledgeEntry, Project, Warning
 from backend.app.services import rag
+from backend.app.services import requirement_slots as slot_svc
 
 logger = logging.getLogger("icops.orchestrator")
 
@@ -192,46 +193,94 @@ class Orchestrator:
     """单入口意图路由编排。"""
 
     def route(self, db: Session, session: ChatSession | None, user_text: str) -> AgentArtifact:
+        # ---------- 会话需求槽位：跨轮抽取/合并（数字来自规则引擎，不经过大模型） ----------
+        state = dict(session.state or {}) if session is not None else {}
+        extracted = slot_svc.slots_from_text(user_text)
+        slots = slot_svc.merge_slots(state.get("slots"), extracted)
+        pending = state.get("pending_intent")
+        if pending and not extracted:
+            miss = slot_svc.missing_slots(slots)
+            if len(miss) == 1:
+                v = slot_svc.interpret_bare_value(user_text, miss[0])
+                if v is not None:
+                    slots = slot_svc.merge_slots(slots, {miss[0]: v})
+        patch: dict = {"slots": slots}
+
+        def out(art: AgentArtifact) -> AgentArtifact:
+            art.payload.setdefault("session_patch", {}).update(patch)
+            return art
+
         # 1) 多轮追问优先（引用上一轮方案）
         fb = _solution_followup(db, session, user_text)
         if fb is not None:
-            return fb
+            return out(fb)
         intent = classify_intent(user_text)
-        logger.info("chat intent=%s session=%s", intent, session.id if session else None)
+        logger.info(
+            "chat intent=%s session=%s slots=%s", intent, session.id if session else None, list(slots)
+        )
         if intent == "human":
-            return AgentArtifact(
-                agent="human",
-                transfer=True,
-                facts=["已为您转接人工客服（记录本次会话用于知识库优化）"],
-                message="转人工",
-            )
-        if intent == "dispatch":
-            return dispatch_agent.handle(db, user_text)
-        if intent == "maintenance":
-            return maintenance_agent.handle(db, user_text)
-        if intent == "solution":
-            doc_type = (
-                "bid"
-                if _has(user_text, ("投标", "招标", "竞标"))
-                else (
-                    "selection"
-                    if _has(user_text, ("选型", "采购", "报价", "价格", "多少钱"))
-                    else "construction"
+            return out(
+                AgentArtifact(
+                    agent="human",
+                    transfer=True,
+                    facts=["已为您转接人工客服（记录本次会话用于知识库优化）"],
+                    message="转人工",
                 )
             )
-            return solution_agent.handle(db, user_text, doc_type=doc_type)
+        if intent == "dispatch":
+            return out(dispatch_agent.handle(db, user_text))
+        if intent == "maintenance":
+            return out(maintenance_agent.handle(db, user_text))
+        if intent == "solution" or (pending and pending.get("agent") == "solution"):
+            doc_type = (pending or {}).get("doc_type") or "construction"
+            if _has(user_text, ("投标", "招标", "竞标")):
+                doc_type = "bid"
+            elif _has(user_text, ("选型", "采购", "报价", "价格", "多少钱")):
+                doc_type = "selection"
+            # 关键参数缺失 -> 阻塞生成，返回清单式追问（避免无效方案）
+            miss = slot_svc.missing_slots(slots)
+            if miss:
+                patch["pending_intent"] = {"agent": "solution", "doc_type": doc_type, "brief": user_text[:80]}
+                facts = [f"还缺少 {len(miss)} 项关键参数，暂不生成方案（避免产出无效方案）："]
+                facts += [
+                    f"· {slot_svc.SLOT_META[k]['label']}：{slot_svc.SLOT_META[k]['question']}"
+                    for k in miss
+                    if k in slot_svc.SLOT_META
+                ]
+                facts.append("可在对话下方表单一次性补录，补录后我会自动继续生成方案，无需重述需求。")
+                return out(
+                    AgentArtifact(
+                        agent="requirement",
+                        facts=facts,
+                        payload={
+                            "missing_slots": miss,
+                            "slot_form": slot_svc.form_spec(slots, miss),
+                            "slots": slots,
+                            "slot_summary": slot_svc.slot_summary(slots),
+                            "pending_intent": patch["pending_intent"],
+                        },
+                        message=f"关键参数缺失（{len(miss)} 项），已生成追问清单",
+                    )
+                )
+            # 参数齐备 -> 续跑原任务
+            patch["pending_intent"] = None
+            art = solution_agent.handle(db, slot_svc.requirement_text(slots), doc_type=doc_type)
+            art.payload["slots"] = slots
+            art.payload["slot_summary"] = slot_svc.slot_summary(slots)
+            return out(art)
         if intent == "status":
             facts = _status_facts(db)
             # 并行补充领域知识检索（可解释）
             hits = rag.hybrid_search(db, user_text, top_k=1)
             if hits:
                 facts.append(f"延伸资料：{hits[0].title}（{hits[0].source}）")
-                art = AgentArtifact(
-                    agent="status", facts=facts, citations=rag.citations_of(hits), message="运营状态查询"
+                return out(
+                    AgentArtifact(
+                        agent="status", facts=facts, citations=rag.citations_of(hits), message="运营状态查询"
+                    )
                 )
-                return art
-            return AgentArtifact(agent="status", facts=facts, message="运营状态查询")
-        return _kb_qa(db, user_text)
+            return out(AgentArtifact(agent="status", facts=facts, message="运营状态查询"))
+        return out(_kb_qa(db, user_text))
 
 
 orchestrator = Orchestrator()

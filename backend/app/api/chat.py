@@ -15,6 +15,8 @@ from backend.app.core.db import get_db
 from backend.app.core.llm_gateway import gateway
 from backend.app.core.security import get_current_user
 from backend.app.models import ChatMessage, ChatSession, User
+from backend.app.models.system import utcnow
+from backend.app.services import requirement_slots as slot_svc
 
 logger = logging.getLogger("icops.chat")
 router = APIRouter(prefix="/api/chat")
@@ -68,21 +70,6 @@ def create_session(body: SessionIn, db: Session = Depends(get_db), user: User = 
     return {"session_id": s.id, "title": s.title}
 
 
-@router.get("/sessions")
-def list_sessions(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
-    rows = (
-        db.query(ChatSession)
-        .filter(ChatSession.user_id == user.id)
-        .order_by(ChatSession.id.desc())
-        .limit(50)
-        .all()
-    )
-    return [
-        {"session_id": s.id, "title": s.title, "created_at": s.created_at.isoformat() if s.created_at else ""}
-        for s in rows
-    ]
-
-
 @router.get("/sessions/{sid}/messages")
 def session_messages(sid: int, db: Session = Depends(get_db)):
     s = db.get(ChatSession, sid)
@@ -99,6 +86,141 @@ def session_messages(sid: int, db: Session = Depends(get_db)):
         }
         for m in rows
     ]
+
+
+@router.get("/sessions")
+def list_sessions(status: str = "all", db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    """会话列表：按 进行中 / 已归档 分组返回（归档不删除，可恢复）。"""
+    q = db.query(ChatSession).filter(ChatSession.user_id == user.id)
+    if status in ("active", "archived"):
+        q = q.filter(ChatSession.status == status)
+    rows = q.order_by(ChatSession.id.desc()).limit(100).all()
+
+    def item(s: ChatSession) -> dict:
+        return {
+            "session_id": s.id,
+            "title": s.title,
+            "status": s.status or "active",
+            "tags": s.tags or "",
+            "slots": (s.state or {}).get("slots") or {},
+            "slot_summary": slot_svc.slot_summary((s.state or {}).get("slots")),
+            "pending": bool((s.state or {}).get("pending_intent")),
+            "updated_at": s.updated_at.isoformat() if s.updated_at else "",
+            "archived_at": s.archived_at.isoformat() if s.archived_at else "",
+        }
+
+    active = [item(s) for s in rows if (s.status or "active") == "active"]
+    archived = [item(s) for s in rows if (s.status or "active") == "archived"]
+    return {
+        "active": active,
+        "archived": archived,
+        "counts": {"active": len(active), "archived": len(archived)},
+    }
+
+
+class SessionPatch(BaseModel):
+    title: str | None = None
+    tags: str | None = None
+    status: str | None = None  # active | archived
+
+
+@router.patch("/sessions/{sid}")
+def patch_session(
+    sid: int, body: SessionPatch, db: Session = Depends(get_db), user: User = Depends(get_current_user)
+):
+    """会话重命名 / 打标签 / 归档 / 恢复。"""
+    s = db.get(ChatSession, sid)
+    if s is None or (s.user_id not in (None, user.id)):
+        raise HTTPException(status_code=404, detail="会话不存在")
+    if body.title is not None and body.title.strip():
+        s.title = body.title.strip()[:120]
+    if body.tags is not None:
+        s.tags = body.tags.strip()[:120]
+    if body.status in ("active", "archived"):
+        s.status = body.status
+        s.archived_at = utcnow() if body.status == "archived" else None
+    db.commit()
+    return {
+        "session_id": s.id,
+        "title": s.title,
+        "status": s.status,
+        "tags": s.tags,
+        "archived_at": s.archived_at.isoformat() if s.archived_at else "",
+    }
+
+
+class SlotValuesIn(BaseModel):
+    values: dict = Field(default_factory=dict, description="补录表单：{slot_key: 值}")
+
+
+@router.post("/sessions/{sid}/slots")
+async def submit_slots(
+    sid: int, body: SlotValuesIn, db: Session = Depends(get_db), user: User = Depends(get_current_user)
+):
+    """缺参补录：合并表单值 → 若参数齐备则自动续跑原任务（待续 intent）。"""
+    s = db.get(ChatSession, sid)
+    if s is None:
+        raise HTTPException(status_code=404, detail="会话不存在")
+    state = dict(s.state or {})
+    slots = slot_svc.merge_form_values(state.get("slots"), body.values)
+    state["slots"] = slots
+    s.state = state
+    db.commit()
+
+    miss = slot_svc.missing_slots(slots)
+    labels = dict((k, m["label"]) for k, m in slot_svc.SLOT_META.items())
+    human = "；".join(
+        f"{labels.get(k, k)}：{v}" for k, v in (body.values or {}).items() if v not in (None, "")
+    )
+
+    if miss:  # 仍有缺失：继续追问，不生成方案
+        text = "已记录补充信息，仍缺少：" + "、".join(labels.get(k, k) for k in miss) + "。请继续补录。"
+        meta = {
+            "agent": "requirement",
+            "citations": [],
+            "transfer": False,
+            "missing_slots": miss,
+            "slot_form": slot_svc.form_spec(slots, miss),
+            "slot_summary": slot_svc.slot_summary(slots),
+        }
+        mid = _persist(db, s, f"（补录）{human}", text, meta)
+        return {
+            "message_id": mid,
+            "agent": "requirement",
+            "content": text,
+            "need_more": True,
+            "missing_slots": miss,
+            "slot_form": meta["slot_form"],
+            "slot_summary": meta["slot_summary"],
+            "citations": [],
+            "transfer": False,
+        }
+
+    # 参数齐备 -> 自动续跑（原任务意图已在 pending_intent 中记忆）
+    synth = slot_svc.requirement_text(slots)
+    ro = _route(db, s, synth)
+    text = await _llm_text(_prompt_messages(_history(db, sid), synth, ro.facts))
+    last = gateway.last_meta or {}
+    meta = {
+        "agent": ro.art.agent,
+        "citations": ro.art.citations,
+        "transfer": False,
+        "provider": last.get("provider", ""),
+        "degraded": bool(last.get("degraded")),
+        "slot_summary": slot_svc.slot_summary(slots),
+    }
+    mid = _persist(db, s, f"（补录并继续）{human}", text, meta)
+    return {
+        "message_id": mid,
+        "agent": meta["agent"],
+        "content": text,
+        "need_more": False,
+        "citations": meta["citations"],
+        "transfer": False,
+        "provider": meta["provider"],
+        "degraded": meta["degraded"],
+        "slot_summary": meta["slot_summary"],
+    }
 
 
 class _RouteOut:
@@ -123,6 +245,13 @@ def _route(db: Session, s: ChatSession, user_text: str) -> _RouteOut:
             "payload_preview": json.dumps(art.payload, ensure_ascii=False)[:2000],
         }
     )
+    # 需求槽位与待续任务（缺参阻塞 -> 补录后续跑）
+    patch = art.payload.get("session_patch") or {}
+    for k, v in patch.items():
+        if v is None:
+            state.pop(k, None)
+        else:
+            state[k] = v
     if art.agent == "solution" and art.payload.get("bundles"):
         state["plans"] = [
             {
@@ -134,9 +263,22 @@ def _route(db: Session, s: ChatSession, user_text: str) -> _RouteOut:
             for i, b in enumerate(art.payload["bundles"])
         ]
         state["best_index"] = art.payload.get("best_index", 0)
+        state.pop("pending_intent", None)
     s.state = state
     db.commit()
     return _RouteOut(art.facts, art, s)
+
+
+def _slot_meta(art) -> dict:
+    """缺参追问的附带结构化信息（供 SSE 与消息元数据，前端渲染补录表单）。"""
+    payload = art.payload or {}
+    if art.agent != "requirement" or not payload.get("missing_slots"):
+        return {}
+    return {
+        "missing_slots": payload.get("missing_slots"),
+        "slot_form": payload.get("slot_form"),
+        "slot_summary": payload.get("slot_summary"),
+    }
 
 
 def _persist(db: Session, s: ChatSession, user_text: str, assistant_text: str, meta: dict) -> int:
@@ -162,6 +304,7 @@ async def send_message(
     if s is None:
         raise HTTPException(status_code=404, detail="会话不存在")
     ro = _route(db, s, body.message)
+    slot_meta = _slot_meta(ro.art)
     if ro.art.transfer or ro.art.agent == "human":
         text = "\n".join(ro.facts) if ro.facts else "已为您转人工客服。"
         meta = {"agent": "human", "citations": [], "transfer": True}
@@ -175,6 +318,7 @@ async def send_message(
             "transfer": False,
             "provider": last.get("provider", ""),
             "degraded": bool(last.get("degraded")),
+            **slot_meta,
         }
     mid = _persist(db, s, body.message, text, meta)
     return {
@@ -185,6 +329,8 @@ async def send_message(
         "transfer": meta["transfer"],
         "provider": meta.get("provider", ""),
         "degraded": meta.get("degraded", False),
+        "need_more": bool(slot_meta),
+        **slot_meta,
     }
 
 
@@ -197,9 +343,19 @@ async def stream_message(
         raise HTTPException(status_code=404, detail="会话不存在")
     ro = _route(db, s, body.message)
     citations = ro.art.citations
+    slot_meta = _slot_meta(ro.art)
 
     async def gen():
-        yield _sse("route", {"agent": ro.art.agent, "session_id": sid, "message": body.message[:80]})
+        yield _sse(
+            "route",
+            {
+                "agent": ro.art.agent,
+                "session_id": sid,
+                "message": body.message[:80],
+                "need_more": bool(slot_meta),
+                **slot_meta,
+            },
+        )
         if ro.art.transfer or ro.art.agent == "human":
             text = "\n".join(ro.facts) if ro.facts else "已为您转人工客服。"
             mid = _persist(db, s, body.message, text, {"agent": "human", "citations": [], "transfer": True})
@@ -224,6 +380,7 @@ async def stream_message(
             "transfer": False,
             "provider": last.get("provider", ""),
             "degraded": bool(last.get("degraded")),
+            **slot_meta,
         }
         mid = _persist(db, s, body.message, text, meta)
         yield _sse("citations", {"citations": citations})
@@ -236,6 +393,7 @@ async def stream_message(
                 "citations": citations,
                 "provider": meta["provider"],
                 "degraded": meta["degraded"],
+                **slot_meta,
             },
         )
 

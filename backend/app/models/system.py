@@ -29,14 +29,20 @@ class User(Base):
 
 
 class ChatSession(Base):
-    """对话会话：集中存放编排状态（当前智能体、中间结果、引用来源）。"""
+    """对话会话：集中存放编排状态（当前智能体、中间结果、引用来源）。
+
+    归档：status=active|archived（归档不删除，可恢复、可重命名、可加标签）。
+    """
 
     __tablename__ = "sys_chat_session"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     user_id: Mapped[int | None] = mapped_column(ForeignKey("sys_user.id"), nullable=True)
     title: Mapped[str] = mapped_column(String(128), default="新对话")
-    state: Mapped[dict] = mapped_column(JSON, default=dict)  # 编排状态快照
+    state: Mapped[dict] = mapped_column(JSON, default=dict)  # 编排状态快照（含 slots 需求槽位）
+    status: Mapped[str] = mapped_column(String(16), default="active", index=True)  # active|archived
+    tags: Mapped[str] = mapped_column(String(128), default="")  # 逗号分隔标签（可按项目/客户）
+    archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
 

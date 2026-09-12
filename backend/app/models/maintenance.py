@@ -67,10 +67,35 @@ class WorkOrder(Base):
     fix_plan: Mapped[str] = mapped_column(Text, default="")
     parts: Mapped[list] = mapped_column(JSON, default=list)  # 备件清单 [{sku,name,qty,price}]
     est_hours: Mapped[float] = mapped_column(Float, default=0)
-    engineer: Mapped[str] = mapped_column(String(64), default="")  # 推荐工程师
-    status: Mapped[str] = mapped_column(String(24), default="created")
+    engineer: Mapped[str] = mapped_column(String(64), default="")  # 推荐/指派工程师
+    # 六状态流转：created 已生成 → dispatched 已派工 → repairing 维修中
+    #            → pending_acceptance 待验收 → completed 已完成 → archived 已归档
+    status: Mapped[str] = mapped_column(String(24), default="created", index=True)
+    severity: Mapped[str] = mapped_column(String(8), default="M")
+    repair_notes: Mapped[str] = mapped_column(Text, default="")  # 维修记录
+    labor_hours: Mapped[float] = mapped_column(Float, default=0)  # 实际工时
+    parts_used: Mapped[list] = mapped_column(JSON, default=list)  # 实际消耗备件
+    dispatched_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    repair_started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    acceptance_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class WorkOrderEvent(Base):
+    """工单事件（状态流转留痕）：谁在何时把工单从什么状态推进到什么状态。"""
+
+    __tablename__ = "oms_work_order_event"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    workorder_code: Mapped[str] = mapped_column(String(32), index=True)
+    from_status: Mapped[str] = mapped_column(String(24), default="")
+    to_status: Mapped[str] = mapped_column(String(24), default="")
+    note: Mapped[str] = mapped_column(Text, default="")
+    operator: Mapped[str] = mapped_column(String(64), default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 
 class MaintenancePlan(Base):

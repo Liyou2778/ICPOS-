@@ -35,6 +35,12 @@ from backend.app.services.diagnosis import create_workorder, diagnose_code, diag
 from backend.app.services.dispatch import dispatch_service
 from backend.app.services.kb import build_all_knowledge
 from backend.app.services.predictive import models_ready, predict_device
+from backend.app.services.operations import (
+    advance_workorder,
+    archive_stats,
+    device_operations,
+    workorder_detail,
+)
 from backend.app.services.predictive_corpus import (
     artifacts_ready as corpus_artifacts_ready,
     corpus_devices,
@@ -544,3 +550,48 @@ def corpus_model_report():
 def maintenance_predict_corpus(device_id: str, at: str | None = None):
     """语料设备部件级风险推理（机理分组多检测器 + 误报预算标定阈值）。"""
     return predict_corpus_device(device_id, at_ts=at)
+
+
+# ---------------- 智能运维：设备运营 / 工单状态机 / 维修归档 ----------------
+@router.get("/maintenance/operations")
+def maintenance_operations(db: Session = Depends(get_db)):
+    """设备运营栏：台账与实时状态、利用率/工时/能耗、保养到期、健康评分、备件预警。"""
+    return device_operations(db)
+
+
+class WorkOrderStatusIn(BaseModel):
+    to_status: str = Field(
+        ..., description="created|dispatched|repairing|pending_acceptance|completed|archived"
+    )
+    note: str = ""
+    operator: str = ""
+    labor_hours: float | None = None
+    repair_notes: str | None = None
+    parts_used: list | None = None
+
+
+@router.patch("/maintenance/workorders/{code}/status")
+def workorder_status(code: str, body: WorkOrderStatusIn, db: Session = Depends(get_db)):
+    """推进工单状态（六状态机，留痕到 WorkOrderEvent）。"""
+    return advance_workorder(
+        db,
+        code,
+        body.to_status,
+        note=body.note,
+        operator=body.operator,
+        labor_hours=body.labor_hours,
+        repair_notes=body.repair_notes,
+        parts_used=body.parts_used,
+    )
+
+
+@router.get("/maintenance/workorders/{code}")
+def workorder_get(code: str, db: Session = Depends(get_db)):
+    """工单详情（含状态时间线与流转记录）。"""
+    return workorder_detail(db, code)
+
+
+@router.get("/maintenance/archive")
+def maintenance_archive(db: Session = Depends(get_db)):
+    """维修归档：归档工单 + MTTR / 故障分布 / 备件消耗 / 复发统计。"""
+    return archive_stats(db)

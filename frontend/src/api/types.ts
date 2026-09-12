@@ -92,6 +92,9 @@ export interface ChatMsgMeta {
   transfer: boolean;
   provider?: string;
   degraded?: boolean;
+  missing_slots?: string[];
+  slot_form?: SlotField[];
+  slot_summary?: { key: string; label: string; value: string }[];
 }
 
 export interface DiagnosisItem {
@@ -113,6 +116,116 @@ export interface WorkOrder {
   est_hours: number;
   engineer: string;
   status: string;
+  severity?: string;
+  labor_hours?: number;
+  parts_used?: { name: string; qty: number }[];
+  repair_notes?: string;
+  status_cn?: string;
+  status_color?: string;
+}
+
+export interface WorkOrderTimelineItem {
+  from: string;
+  from_cn: string;
+  to: string;
+  to_cn: string;
+  note: string;
+  operator: string;
+  at: string;
+}
+
+export interface WorkOrderDetail extends WorkOrder {
+  status_cn: string;
+  status_color: string;
+  timeline: WorkOrderTimelineItem[];
+  created_at?: string;
+  dispatched_at?: string;
+  repair_started_at?: string;
+  acceptance_at?: string;
+  completed_at?: string;
+  archived_at?: string;
+}
+
+export interface OpsDevice {
+  code: string;
+  name: string;
+  model_code: string;
+  model_name: string;
+  category_cn: string;
+  work_state: string;
+  lat: number;
+  lng: number;
+  work_hours: number;
+  idle_hours: number;
+  utilization: number;
+  fuel_l: number;
+  health_score: number;
+  open_warnings: number;
+  high_warnings: number;
+  maintenance_due: boolean;
+  plan_items: string[];
+  note: string;
+}
+
+export interface OperationsData {
+  summary: {
+    device_total: number;
+    working: number;
+    fault: number;
+    avg_utilization: number;
+    open_warnings: number;
+    maintenance_due: number;
+    spare_alerts: number;
+    generated_at: string;
+  };
+  devices: OpsDevice[];
+  spare_alerts: { sku: string; name: string; stock: number; price_cny: number; action: string }[];
+  plan_due: { device_code: string; item: string; due_hours: number; window: string; note: string }[];
+  status_flow: { key: string; label: string }[];
+}
+
+export interface ArchiveData {
+  summary: {
+    total_orders: number;
+    archived: number;
+    completed: number;
+    in_progress: number;
+    mttr_hours: number | null;
+    recurrence_devices: number;
+  };
+  archived: WorkOrderDetail[];
+  fault_distribution: { fault_code: string; count: number }[];
+  parts_consumption: { name: string; qty: number }[];
+  recurrence: { device_code: string; orders: number; note: string }[];
+  status_flow: { key: string; label: string }[];
+}
+
+export interface SlotField {
+  key: string;
+  label: string;
+  question: string;
+  kind: 'select' | 'number' | 'text';
+  required: boolean;
+  unit?: string;
+  options?: { value: string; label: string }[];
+  filled: boolean;
+}
+
+export interface ChatSessionItem {
+  session_id: number;
+  title: string;
+  status: 'active' | 'archived';
+  tags: string;
+  slot_summary: { key: string; label: string; value: string }[];
+  pending: boolean;
+  updated_at: string;
+  archived_at: string;
+}
+
+export interface ChatSessionsGrouped {
+  active: ChatSessionItem[];
+  archived: ChatSessionItem[];
+  counts: { active: number; archived: number };
 }
 
 export interface WarningItem {

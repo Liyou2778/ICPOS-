@@ -101,8 +101,31 @@ $env:PYTHONUTF8='1'
 - P2：可测故障检出率 1.0（单实例故障类 BRK/STR/BAT/ELE 无法跨机验证，属数据规模限制，已在报告说明）；
 - 在线推理：`GET /api/maintenance/predict-corpus/{device_id}?at=...`，前端「智能运维中心 → 语料模型」可一键载入真实故障时刻验证命中。
 
-## 4. 启动 / 测试 / 验收
+### 3.2 智能对话与智能运维（批一重构）
 
+**智能对话（上下文 + 缺参追问 + 归档）**
+- 会话内结构化**需求槽位 slots**（场景/年作业量/工期/预算/约束）：每轮由规则引擎抽取并与历史合并，
+  数字不经大模型（防幻觉），会话状态持久化在 `sys_chat_session.state.slots`。
+- **缺参阻塞**：关键槽位不全时不生成方案，返回清单式追问 + 补录表单规格
+  （`missing_slots` / `slot_form` / `slot_summary`）；`POST /api/chat/sessions/{sid}/slots` 提交后
+  若参数齐备则**自动续跑原任务**（`pending_intent` 记忆），无需用户重述需求。
+- **会话归档**：`PATCH /api/chat/sessions/{sid}` 支持重命名/标签/归档/恢复；
+  `GET /api/chat/sessions` 按 `active` / `archived` 分组返回（归档不删除，可检索可恢复）。
+
+**智能运维（设备运营 / 预警中心 / 智能诊断 / 工单中心 / 维修归档）**
+- 设备运营：`GET /api/maintenance/operations` —— 台账+实时状态、利用率/工时/能耗（遥测聚合）、
+  健康评分、保养到期提醒、备件库存预警（库存 ≤2）。
+- 预警中心：`GET /api/maintenance/warnings`（五要素）融合两类预测模型——
+  本矿 v1 温漂模型与语料多检测器模型（`/api/maintenance/predict-corpus/{device_id}?at=...`）。
+- 智能诊断：Top3 + 置信度 + 维修方案/备件/工时/工程师，支持从预警一键带参。
+- 工单中心：**六状态机** `created→dispatched→repairing→pending_acceptance→completed→archived`，
+  `PATCH /api/maintenance/workorders/{code}/status` 推进（仅允许向前），每次变更写入
+  `oms_work_order_event`（时间线留痕：操作人/备注/时间）。
+- 维修归档：`GET /api/maintenance/archive` —— 归档工单（含时间线）、MTTR、故障分布、
+  备件消耗、复发设备统计，支撑案例回写知识库。
+- 数据迁移：`core/db.py::migrate_schema()` 在启动时自动为既有表补齐新增列并创建新表（幂等）。
+
+## 4. 启动 / 测试 / 验收
 ```powershell
 # 启动
 .\.venv\Scripts\python.exe -m uvicorn backend.app.main:app --reload
