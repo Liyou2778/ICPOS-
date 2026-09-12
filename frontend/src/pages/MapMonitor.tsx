@@ -5,6 +5,7 @@ import { api } from '../api';
 import type { DeviceItem, FrontendConfig } from '../api/types';
 import EChart from '../components/EChart';
 import AmapView from '../components/AmapView';
+import Site3DView from '../components/Site3DView';
 import type { EChartsOption } from 'echarts';
 
 // 站点锚点与“电子围栏”示意（与模拟数据生成器一致）
@@ -23,7 +24,7 @@ export default function MapMonitor() {
   const [track, setTrack] = useState<{ lat: number; lng: number }[]>([]);
   const [playing, setPlaying] = useState(false);
   const [amap, setAmap] = useState<FrontendConfig | null>(null);
-  const [mode, setMode] = useState<'auto' | 'offline'>('auto');
+  const [mode, setMode] = useState<'auto' | 'three' | 'offline'>('three');
   const wsRef = useRef<WebSocket | null>(null);
 
   useEffect(() => { api.frontendConfig().then(setAmap).catch(() => undefined); }, []);
@@ -135,15 +136,19 @@ export default function MapMonitor() {
         <Button icon={<ReloadOutlined />} onClick={load}>刷新</Button>
       </Space>}>
         {err && <Tag color="red">{err}</Tag>}
-        {amap?.amap_enabled && (
-          <Segmented value={mode} onChange={(v) => setMode(v as 'auto' | 'offline')}
-            options={[{ label: '高德真实地图', value: 'auto' }, { label: '离线自绘', value: 'offline' }]}
-            style={{ marginBottom: 8 }} />
-        )}
+        <Segmented value={mode} onChange={(v) => setMode(v as 'auto' | 'three' | 'offline')}
+          options={[
+            ...(amap?.amap_enabled ? [{ label: '高德真实地图', value: 'auto' }] : []),
+            { label: '离线 3D（Three.js）', value: 'three' },
+            { label: '离线 2.5D 自绘', value: 'offline' },
+          ]}
+          style={{ marginBottom: 8 }} />
         <Spin spinning={loading}>
-          {amap?.amap_enabled && mode === 'auto'
+          {mode === 'auto' && amap?.amap_enabled
             ? <AmapView devices={devices} track={track} key={amap.amap_key} sec={amap.amap_security_code} />
-            : <EChart option={option} height={520} />}
+            : mode === 'three'
+              ? <Site3DView devices={devices} track={track} height={520} />
+              : <EChart option={option} height={520} />}
         </Spin>
         <Row gutter={[12, 12]} style={{ marginTop: 12 }}>
           <Col xs={24} md={8}>
