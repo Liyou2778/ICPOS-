@@ -66,6 +66,10 @@ uv sync
 .\.venv\Scripts\python.exe -m scripts.train_models        # ④ 预测模型训练（≥85%/提前量≥24h）
 .\.venv\Scripts\python.exe -m uvicorn backend.app.main:app --reload
 
+# 语料训练管线（可选：外部语料 data/corpus/*.jsonl → 知识库/结构化库 + 模型重训）
+.\.venv\Scripts\python.exe -m scripts.ingest_corpus         # ETL：+138 型号 / 1190 知识条目 / 112k 行训练集
+.\.venv\Scripts\python.exe -m scripts.train_models_corpus   # 机理分组多检测器（P1 检出 10/10，提前量 24.3h）
+
 # 前端（修改页面热更新）
 cd frontend
 npm install && npm run dev      # http://127.0.0.1:5173（/api、/ws 已代理到 8000）
@@ -126,6 +130,8 @@ npm run build                   # 产物 frontend/dist，单源托管由后端�
 | 参数直读 / RAG 检索 | ✅ 100% / 100% | `scripts.quality_check --strict` |
 | 预测准确率 / 提前量 | ✅ 97.8% / 34h | `data/models/eval_report.json` |
 | 空载率下降 | ✅ -76.2%（27.0%→6.4%） | `/api/dispatch/ab` |
+| 语料知识库扩充 | ✅ +138 型号 / 1190 知识条目 / 2620 向量 | `scripts/ingest_corpus` |
+| 语料模型（企业级，13 台设备×112k 遥测×12 故障） | ✅ P1 检出 10/10、提前量 24.3h、部件 Top1 90%、误报 2.0% | `data/models/corpus/eval_report.json` |
 
 > ⚠️ **口径说明**：MVP 按"模拟先行"策略以仿真数据验证（指导书 5.2 / PRD §4.2 范围外）；
 > 真实设备 IoT 接入与模型迁移列入 V1.1 试点；生成内容均附"需人工确认"标注。

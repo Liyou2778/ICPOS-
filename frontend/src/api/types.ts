@@ -90,6 +90,8 @@ export interface ChatMsgMeta {
   agent: string;
   citations: { entry_id: number; title: string; kb_type: string; source: string; version: string }[];
   transfer: boolean;
+  provider?: string;
+  degraded?: boolean;
 }
 
 export interface DiagnosisItem {
@@ -131,4 +133,47 @@ export interface FrontendConfig {
   amap_enabled: boolean;
   amap_key: string;
   amap_security_code: string;
+}
+
+export interface CorpusDevice {
+  device_id: string;
+  model: string;
+  category: string;
+  role: string;
+  power_kw?: number;
+  mass_kg?: number;
+  bucket_m3?: number;
+}
+
+export interface CorpusFault {
+  device_id: string;
+  code: string;
+  component: string;
+  mode: string;
+  onset_ts: string;
+  detect_ts: string;
+  lead_hours: number;
+  severity: string;
+}
+
+export interface CorpusClassScore {
+  class: string;
+  class_cn: string;
+  proba: number;
+  threshold: number;
+  exceed: boolean;
+  score: number;
+}
+
+export interface CorpusPrediction {
+  device_id: string;
+  at?: string;
+  risky: boolean;
+  top_class?: string;
+  top_class_cn?: string;
+  top_conf?: number;
+  classes: CorpusClassScore[];
+  remaining_hours?: number | null;
+  note?: string;
+  model_note?: string;
 }

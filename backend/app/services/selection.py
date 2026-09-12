@@ -118,15 +118,25 @@ def generate_selection(db: Session, req: ParsedRequirement) -> SelectionResult:
         raise ValueError("缺少年作业量/工程量参数，无法测算产能")
     req_tph = req.daily_t / WORK_HOURS_DAY
 
+    # 仅使用有价格基线的机型参与 TCO 测算（语料扩充的无价格型号仅供查询/RAG，避免 0 成本失真）
     excs = (
         db.query(EquipmentModel)
-        .filter(EquipmentModel.category == "excavator", EquipmentModel.scene.in_([req.scene_type, "mining"]))
+        .filter(
+            EquipmentModel.category == "excavator",
+            EquipmentModel.scene.in_([req.scene_type, "mining"]),
+            EquipmentModel.price_cny > 0,
+            EquipmentModel.bucket_m3 > 0,
+        )
         .order_by(EquipmentModel.bucket_m3)
         .all()
     )
     trucks = (
         db.query(EquipmentModel)
-        .filter(EquipmentModel.category == "mining_truck")
+        .filter(
+            EquipmentModel.category == "mining_truck",
+            EquipmentModel.price_cny > 0,
+            EquipmentModel.rated_load_t > 0,
+        )
         .order_by(EquipmentModel.rated_load_t)
         .all()
     )

@@ -90,6 +90,8 @@ export default function ChatCenter() {
           } else if (event === 'done') {
             finalMeta.transfer = Boolean(data.transfer);
             finalMeta.agent = finalMeta.agent || String(data.agent || '');
+            finalMeta.provider = String(data.provider || '');
+            finalMeta.degraded = Boolean(data.degraded);
             const content = String(data.content ?? '');
             got = true;
             setMsgs((prev) => prev.map((x) => (x.id === aid ? { ...x, content: x.content || content, meta: finalMeta } : x)));
@@ -141,9 +143,14 @@ export default function ChatCenter() {
                       <div style={{ background: '#1677ff', color: '#fff', padding: '10px 14px', borderRadius: 10, whiteSpace: 'pre-wrap' }}>{m.content}</div>
                     ) : (
                       <Card size="small" style={{ background: '#fafafa', borderRadius: 10 }} styles={{ body: { padding: 10 } }}>
-                        <Space style={{ marginBottom: 4 }}>
+                        <Space style={{ marginBottom: 4 }} wrap>
                           <RobotOutlined style={{ color: '#1677ff' }} />
                           {m.meta?.agent ? <Tag color={AGENT_COLOR[m.meta.agent] ?? 'default'}>{AGENT_CN[m.meta.agent] ?? m.meta.agent}</Tag> : null}
+                          {m.meta?.provider
+                            ? (m.meta.provider !== 'demo'
+                              ? <Tag color="green">{m.meta.provider === 'deepseek' ? 'DeepSeek 生成' : `${m.meta.provider} 生成`}</Tag>
+                              : <Tag color="orange">离线兜底（未用到真实大模型）</Tag>)
+                            : null}
                           {m.meta?.transfer ? <Tag color="red">已转人工</Tag> : null}
                           {m.meta && m.meta.agent && m.meta.agent !== 'human' && <Typography.Text type="secondary" style={{ fontSize: 12 }}>AI 生成初稿，需人工确认</Typography.Text>}
                         </Space>

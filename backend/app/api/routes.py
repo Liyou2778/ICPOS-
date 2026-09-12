@@ -23,6 +23,7 @@ from backend.app.models import (
     EquipmentModel,
     FaultCode,
     KnowledgeEntry,
+    LLMCallLog,
     Project,
     SolutionDocument,
     User,
@@ -34,6 +35,12 @@ from backend.app.services.diagnosis import create_workorder, diagnose_code, diag
 from backend.app.services.dispatch import dispatch_service
 from backend.app.services.kb import build_all_knowledge
 from backend.app.services.predictive import models_ready, predict_device
+from backend.app.services.predictive_corpus import (
+    artifacts_ready as corpus_artifacts_ready,
+    corpus_devices,
+    corpus_faults,
+    predict_corpus_device,
+)
 from backend.app.services.vectorstore import vector_store
 
 logger = logging.getLogger("icops.api")
@@ -81,8 +88,39 @@ def health(db: Session = Depends(get_db)):
             "vector_chunks": vector_store.get().count(),
         },
         "predictive_ready": models_ready(),
+        "llm_last": gateway.last_meta,
         "message": "OK",
     }
+
+
+@router.get("/llm/status")
+def llm_status(db: Session = Depends(get_db)):
+    """大模型接入自检：当前模式、密钥配置、最近一次实际调用方、调用日志。"""
+    logs = db.query(LLMCallLog).order_by(LLMCallLog.id.desc()).limit(6).all()
+    return {
+        "mode": gateway.mode,  # deepseek | dashscope | demo
+        "has_deepseek_key": settings.has_deepseek,
+        "has_dashscope_key": settings.has_dashscope,
+        "last_call": gateway.last_meta,
+        "recent_calls": [
+            {
+                "provider": x.provider,
+                "model": x.model,
+                "scene": x.scene,
+                "ok": x.ok,
+                "tokens": x.prompt_tokens + x.completion_tokens,
+                "cost_cny": round(x.cost_cny, 6),
+                "at": x.created_at.isoformat() if x.created_at else "",
+            }
+            for x in logs
+        ],
+    }
+
+
+@router.post("/llm/probe")
+async def llm_probe():
+    """真实调用一次大模型，用于确认 DeepSeek 是否可用（会消耗极少 token）。"""
+    return await gateway.probe()
 
 
 class BootstrapOut(BaseModel):
@@ -194,9 +232,11 @@ def kb_stats(db: Session = Depends(get_db)):
 @router.get("/config/frontend")
 def frontend_config():
     """前端运行时配置：地图双模式（填了高德 Key/安全码才启用真实地图）。"""
-    return {"amap_enabled": bool(settings.amap_key),
-            "amap_key": settings.amap_key,
-            "amap_security_code": settings.amap_security_code}
+    return {
+        "amap_enabled": bool(settings.amap_key),
+        "amap_key": settings.amap_key,
+        "amap_security_code": settings.amap_security_code,
+    }
 
 
 # ---------------- 运营驾驶舱 ----------------
@@ -474,3 +514,33 @@ def maintenance_workorders(db: Session = Depends(get_db)):
         }
         for w in rows
     ]
+
+
+# ---------------- 语料模型（企业级训练产物在线推理） ----------------
+@router.get("/maintenance/corpus/devices")
+def corpus_device_list():
+    """语料站点设备清单（data/simulated/corpus_meta.json）。"""
+    return {"devices": corpus_devices(), "ready": corpus_artifacts_ready()}
+
+
+@router.get("/maintenance/corpus/faults")
+def corpus_fault_list():
+    """语料故障真值（含 detect_ts/onset_ts/lead_hours），用于演示与核验。"""
+    return {"faults": corpus_faults()}
+
+
+@router.get("/maintenance/corpus/model-report")
+def corpus_model_report():
+    """语料模型评估报告（P1 时序留出 / P2 跨设备参考）。"""
+    f = settings.repo_root / "data" / "models" / "corpus" / "eval_report.json"
+    if not f.exists():
+        raise ValueError("语料模型报告不存在：请先执行 uv run python -m scripts.train_models_corpus")
+    import json as _json
+
+    return _json.loads(f.read_text(encoding="utf-8"))
+
+
+@router.get("/maintenance/predict-corpus/{device_id}")
+def maintenance_predict_corpus(device_id: str, at: str | None = None):
+    """语料设备部件级风险推理（机理分组多检测器 + 误报预算标定阈值）。"""
+    return predict_corpus_device(device_id, at_ts=at)

@@ -1,4 +1,4 @@
-import type { ChatMsgMeta, DashboardSummary, DeviceItem, DiagnosisItem, FrontendConfig, HealthInfo, SolutionPlan, TrendPoint, WarningItem, WorkOrder } from './types';
+import type { ChatMsgMeta, CorpusDevice, CorpusFault, CorpusPrediction, DashboardSummary, DeviceItem, DiagnosisItem, FrontendConfig, HealthInfo, SolutionPlan, TrendPoint, WarningItem, WorkOrder } from './types';
 import { http } from './client';
 
 // ---------- 系统 / 鉴权 ----------
@@ -50,6 +50,14 @@ export const api = {
   kbSearch: (q: string, topK = 5) =>
     http.get<{ query: string; hits: { entry_id: number; kb_type: string; title: string; excerpt: string; source: string; score: number }[] }>(
       `/kb/search?q=${encodeURIComponent(q)}&top_k=${topK}`),
+
+  // ---------- 语料模型（企业级训练产物在线推理） ----------
+  corpusDevices: () => http.get<{ devices: CorpusDevice[]; ready: boolean }>('/maintenance/corpus/devices'),
+  corpusFaults: () => http.get<{ faults: CorpusFault[] }>('/maintenance/corpus/faults'),
+  corpusReport: () => http.get<Record<string, any>>('/maintenance/corpus/model-report'),
+  predictCorpus: (deviceId: string, at?: string) =>
+    http.get<CorpusPrediction>(
+      `/maintenance/predict-corpus/${encodeURIComponent(deviceId)}${at ? `?at=${encodeURIComponent(at)}` : ''}`),
 
   // ---------- 前端运行时配置（地图双模式） ----------
   frontendConfig: () => http.get<FrontendConfig>('/config/frontend'),

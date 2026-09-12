@@ -77,6 +77,30 @@ $env:PYTHONUTF8='1'
   温漂在故障前 48h 线性抬升并在停机后保持高位（在线预测与演示语义一致）。
 - `data/models/eval_report.json`：训练评估报告（设备留出法，测试设备 T04）。
 
+### 3.1 语料训练管线（企业级：知识工程 + 模型重训）
+
+把外部语料（`data/corpus/{train,test}.jsonl`，16 类记录 / 227k 行）清洗入库并重训预测模型：
+
+```powershell
+.\.venv\Scripts\python.exe -m scripts.ingest_corpus            # ETL：设备/参数 + 法规工艺 + 模板 + 训练集导出
+.\.venv\Scripts\python.exe -m scripts.train_models_corpus      # 企业级训练（机理分组多检测器）
+.\.venv\Scripts\python.exe -m scripts.catalog_stats            # （可选）语料统计
+```
+
+**ETL 产出（实测）**：设备型号 +138（含斗容/载重/功率/质量参数映射）；知识条目 1,190（法规/工艺/模板，分块 1,612，向量库累计 2,620）；训练集 `data/simulated/corpus_telemetry.csv`（112,320 行：5 分钟采样 × 13 台 × 30 天）+ `corpus_faults.csv`（12 条故障真值，含 `lead_hours` 24–84h）。
+
+**训练方法**（解决跨设备泛化与多故障混叠）：
+1. 设备稳健基线校准（各通道中位数/MAD，等价产线"调试期基线"）；
+2. 机理分组多检测器：液压/发动机/电气/传动/结构/制动/电池各一个 XGBoost，仅用本族敏感通道；
+3. 逐检测器阈值按"健康设备误报预算 2%"标定（避免统一阈值导致召回归零）；
+4. 评估双口径：**P1 实例时序留出**（每个故障最后 N 小时不参与训练，N=min(48, max(12, ½×真实提前量))）与
+   **P2 跨设备 GroupKFold 参考**。
+
+**实测结果**（`data/models/corpus/eval_report.json`）：
+- P1：检出 **10/10（100%）**，提前量平均 **24.3h**、最小 11.9h，部件自动识别 Top1 **90%**，健康误报 **1.96%**（预算 2%）；
+- P2：可测故障检出率 1.0（单实例故障类 BRK/STR/BAT/ELE 无法跨机验证，属数据规模限制，已在报告说明）；
+- 在线推理：`GET /api/maintenance/predict-corpus/{device_id}?at=...`，前端「智能运维中心 → 语料模型」可一键载入真实故障时刻验证命中。
+
 ## 4. 启动 / 测试 / 验收
 
 ```powershell

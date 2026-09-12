@@ -68,6 +68,10 @@ class _OpenAIChannel:
         self.client = httpx.AsyncClient(
             base_url=cand.base_url.rstrip("/"),
             timeout=httpx.Timeout(settings.llm_timeout_stream_total, connect=10.0),
+            headers={
+                "Authorization": f"Bearer {cand.api_key}",  # 关键：OpenAI 兼容通道必须带 Bearer 密钥
+                "Content-Type": "application/json",
+            },
         )
 
     async def close(self) -> None:
@@ -174,6 +178,8 @@ class LLMGateway:
         self._channels: dict[str, _OpenAIChannel] = {}
         self.demo = DemoProvider()
         self._demo_fallback_used: set[str] = set()
+        # 最近一次调用的实际提供方（供 /api/health、SSE 与前端显式展示是否真的用了 DeepSeek）
+        self.last_meta: dict = {}
 
     # ---------- 候选通道 ----------
     def _real_candidates(self) -> list[_Candidate]:
@@ -299,6 +305,13 @@ class LLMGateway:
                     latency_ms=latency,
                     ok=True,
                 )
+                self.last_meta = {
+                    "provider": cand.name,
+                    "model": cand.model,
+                    "degraded": False,
+                    "scene": scene,
+                    "latency_ms": latency,
+                }
                 return LLMResult(
                     text=text,
                     provider=cand.name,
@@ -325,6 +338,14 @@ class LLMGateway:
             ok=True,
         )
         logger.warning("LLM 全部真实通道失败，降级 demo 兜底。原因：%s", "; ".join(errors))
+        self.last_meta = {
+            "provider": "demo",
+            "model": self.demo.model,
+            "degraded": bool(errors),
+            "scene": scene,
+            "latency_ms": latency,
+            "errors": errors[-2:],
+        }
         return LLMResult(
             text=text, provider="demo", model=self.demo.model, degraded=bool(errors), latency_ms=latency
         )
@@ -366,6 +387,13 @@ class LLMGateway:
                     latency_ms=latency,
                     ok=True,
                 )
+                self.last_meta = {
+                    "provider": cand.name,
+                    "model": cand.model,
+                    "degraded": False,
+                    "scene": scene,
+                    "latency_ms": latency,
+                }
                 return
             except Exception as exc:  # noqa: BLE001
                 errors.append(f"{cand.name}: {exc}")
@@ -376,6 +404,14 @@ class LLMGateway:
             chunks.append(d)
             yield LLMResult(text=d, provider="demo", model=self.demo.model, degraded=True)
         latency = int((time.perf_counter() - start) * 1000)
+        self.last_meta = {
+            "provider": "demo",
+            "model": self.demo.model,
+            "degraded": bool(errors),
+            "scene": scene,
+            "latency_ms": latency,
+            "errors": errors[-2:],
+        }
         self._log_call(
             provider="demo",
             model=self.demo.model,
@@ -386,6 +422,25 @@ class LLMGateway:
             latency_ms=latency,
             ok=True,
         )
+
+    async def probe(self) -> dict:
+        """探测真实通道可用性（供 /api/llm/probe 使用，会真实调用一次模型）。"""
+        mode = self.mode
+        if mode == "demo":
+            return {"ok": False, "mode": "demo", "reason": "未配置任何真实大模型密钥（离线演示模式）"}
+        result = await self.complete(
+            [{"role": "user", "content": "只回复四个字：连接成功"}], scene="probe", temperature=0.0
+        )
+        return {
+            "ok": result.provider != "demo",
+            "mode": self.mode,
+            "provider": result.provider,
+            "model": result.model,
+            "degraded": result.degraded,
+            "latency_ms": result.latency_ms,
+            "reply": result.text[:60],
+            "last_meta": self.last_meta,
+        }
 
 
 gateway = LLMGateway()

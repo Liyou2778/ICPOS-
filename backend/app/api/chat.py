@@ -168,7 +168,14 @@ async def send_message(
     else:
         msgs = _prompt_messages(_history(db, sid), body.message, ro.facts)
         text = await _llm_text(msgs)
-        meta = {"agent": ro.art.agent, "citations": ro.art.citations, "transfer": False}
+        last = gateway.last_meta or {}
+        meta = {
+            "agent": ro.art.agent,
+            "citations": ro.art.citations,
+            "transfer": False,
+            "provider": last.get("provider", ""),
+            "degraded": bool(last.get("degraded")),
+        }
     mid = _persist(db, s, body.message, text, meta)
     return {
         "message_id": mid,
@@ -176,6 +183,8 @@ async def send_message(
         "content": text,
         "citations": meta["citations"],
         "transfer": meta["transfer"],
+        "provider": meta.get("provider", ""),
+        "degraded": meta.get("degraded", False),
     }
 
 
@@ -208,10 +217,27 @@ async def stream_message(
             logger.exception("流式对话异常")
             yield _sse("error", {"detail": f"生成中断：{exc}"})
         text = "".join(buf).strip() or "（未能生成回复，请重试）"
-        meta = {"agent": ro.art.agent, "citations": citations, "transfer": False}
+        last = gateway.last_meta or {}
+        meta = {
+            "agent": ro.art.agent,
+            "citations": citations,
+            "transfer": False,
+            "provider": last.get("provider", ""),
+            "degraded": bool(last.get("degraded")),
+        }
         mid = _persist(db, s, body.message, text, meta)
         yield _sse("citations", {"citations": citations})
-        yield _sse("done", {"message_id": mid, "content": text, "transfer": False, "citations": citations})
+        yield _sse(
+            "done",
+            {
+                "message_id": mid,
+                "content": text,
+                "transfer": False,
+                "citations": citations,
+                "provider": meta["provider"],
+                "degraded": meta["degraded"],
+            },
+        )
 
     return StreamingResponse(
         gen(),

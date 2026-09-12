@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Alert, Button, Card, Col, Descriptions, Input, List, Row, Space, Statistic, Table, Tabs, Tag, Typography, message } from 'antd';
+import { Alert, Button, Card, Col, Descriptions, Input, List, Progress, Row, Select, Space, Statistic, Table, Tabs, Tag, Typography, message } from 'antd';
 import { ExperimentOutlined, FileAddOutlined, SearchOutlined } from '@ant-design/icons';
 import { api } from '../api';
-import type { DiagnosisItem, WarningItem, WorkOrder } from '../api/types';
+import type { CorpusDevice, CorpusFault, CorpusPrediction, DiagnosisItem, WarningItem, WorkOrder } from '../api/types';
 
 const SEV = { H: { c: 'red', t: '高' }, M: { c: 'orange', t: '中' }, L: { c: 'blue', t: '低' } } as const;
 
@@ -17,6 +17,14 @@ export default function Maintenance() {
   const [predLoading, setPredLoading] = useState(false);
   const [deviceCodes, setDeviceCodes] = useState<string[]>([]);
   const [loadingList, setLoadingList] = useState(false);
+  // ---- 语料模型（企业级训练产物） ----
+  const [cDevices, setCDevices] = useState<CorpusDevice[]>([]);
+  const [cFaults, setCFaults] = useState<CorpusFault[]>([]);
+  const [cReport, setCReport] = useState<any>(null);
+  const [cDevice, setCDevice] = useState('DEV-011');
+  const [cAt, setCAt] = useState('');
+  const [cPred, setCPred] = useState<CorpusPrediction | null>(null);
+  const [cLoading, setCLoading] = useState(false);
 
   const load = useCallback(async () => {
     setLoadingList(true);
@@ -30,9 +38,33 @@ export default function Maintenance() {
     } finally {
       setLoadingList(false);
     }
+    try {
+      const [cd, cf, rep] = await Promise.all([api.corpusDevices(), api.corpusFaults(), api.corpusReport()]);
+      setCDevices(cd.devices);
+      setCFaults(cf.faults);
+      setCReport(rep);
+    } catch {
+      /* 语料模型未训练时忽略 */
+    }
   }, []);
 
   useEffect(() => { load(); }, [load]);
+
+  const runCorpus = async (device?: string, at?: string) => {
+    const dev = device ?? cDevice;
+    const when = at ?? (cAt || undefined);
+    setCLoading(true);
+    try {
+      const r = await api.predictCorpus(dev, when);
+      setCPred(r);
+      setCDevice(dev);
+      if (when) setCAt(when);
+    } catch (e) {
+      message.error((e as Error).message);
+    } finally {
+      setCLoading(false);
+    }
+  };
 
   const runDiag = async () => {
     setDiagLoading(true);
@@ -140,6 +172,69 @@ export default function Maintenance() {
                       { key: 'r', label: '预计剩余可用', children: pred.remaining_hours == null ? '未知' : `${pred.remaining_hours} 小时` },
                       { key: 'm', label: '模型口径', children: '模拟数据训练（V1.1 真实试点）' },
                     ]} />
+                </Card>
+              )}
+            </Space>
+          ),
+        },
+        {
+          key: 'corpus', label: '语料模型（企业级训练）', children: (
+            <Space direction="vertical" style={{ width: '100%' }}>
+              <Alert type="success" showIcon message="语料训练成果（13 台设备 · 112,320 条遥测 · 12 条故障真值）"
+                description={cReport ? (
+                  <span>
+                    P1 实例时序留出：检出 <b>{cReport?.P1_temporal_holdout?.detected}/{cReport?.P1_temporal_holdout?.detectable_faults}</b>，
+                    提前量 平均 <b>{cReport?.P1_temporal_holdout?.lead_hours_avg}h</b>（最小 {cReport?.P1_temporal_holdout?.lead_hours_min}h），
+                    部件识别 Top1 <b>{((cReport?.P1_temporal_holdout?.component_top1_acc ?? 0) * 100).toFixed(0)}%</b>，
+                    误报 <b>{((cReport?.P1_temporal_holdout?.healthy_false_alarm_rate ?? 0) * 100).toFixed(1)}%</b>；
+                    P2 跨设备参考检出率 {cReport?.P2_cross_device?.detection_rate}
+                  </span>
+                ) : '报告加载中（若为空请先运行 scripts.train_models_corpus）'} />
+              <Space wrap>
+                <Select style={{ width: 260 }} value={cDevice} onChange={setCDevice}
+                  options={cDevices.map((d) => ({ value: d.device_id, label: `${d.device_id} · ${d.model} · ${d.category}` }))} />
+                <Input style={{ width: 220 }} value={cAt} onChange={(e) => setCAt(e.target.value)}
+                  placeholder="推理时刻（可选，如 2026-09-08T10:00）" />
+                <Button type="primary" icon={<ExperimentOutlined />} loading={cLoading} onClick={() => runCorpus()}>部件级风险推理</Button>
+              </Space>
+              <div>
+                <Typography.Text type="secondary">一键载入真实故障时刻（onset 前 6h，验证模型是否命中对应部件）：</Typography.Text>
+                <div style={{ marginTop: 6 }}>
+                  {cFaults.map((f) => (
+                    <Tag key={f.code + f.device_id} color="blue" style={{ cursor: 'pointer', marginBottom: 4 }}
+                      onClick={() => {
+                        const t = new Date(new Date(f.onset_ts).getTime() - 6 * 3600 * 1000);
+                        const iso = t.toISOString().slice(0, 16);
+                        runCorpus(f.device_id, iso);
+                      }}>
+                      {f.device_id} {f.code}（{f.component}，真值提前 {f.lead_hours}h）
+                    </Tag>
+                  ))}
+                </div>
+              </div>
+              {cPred && (
+                <Card size="small" title={`推理结果 · ${cPred.device_id}${cPred.at ? ` @ ${cPred.at}` : ''}`}
+                  extra={<Tag color={cPred.risky ? 'red' : 'green'}>{cPred.risky ? '风险' : '健康'}</Tag>}>
+                  <Alert type={cPred.risky ? 'warning' : 'success'} showIcon style={{ marginBottom: 8 }}
+                    message={cPred.risky
+                      ? `命中部件：${cPred.top_class_cn}（${cPred.top_class}），置信度 ${((cPred.top_conf ?? 0) * 100).toFixed(2)}%`
+                      : '各部件检测器均未超阈值（健康）'}
+                    description={cPred.note} />
+                  {cPred.classes.map((c) => (
+                    <div key={c.class} style={{ marginBottom: 4 }}>
+                      <Space>
+                        <Tag color={c.exceed ? 'red' : 'default'}>{c.class_cn}（{c.class}）</Tag>
+                        <Typography.Text type="secondary">
+                          概率 {c.proba.toExponential(2)} / 阈值 {c.threshold.toExponential(2)} · 超阈倍数 {c.score}×
+                        </Typography.Text>
+                      </Space>
+                      <Progress percent={Math.min(100, (c.score ?? 0) * 50)} showInfo={false}
+                        strokeColor={c.exceed ? '#ff4d4f' : '#d9d9d9'} />
+                    </div>
+                  ))}
+                  <Typography.Paragraph type="secondary" style={{ marginTop: 6, marginBottom: 0, fontSize: 12 }}>
+                    {cPred.model_note}
+                  </Typography.Paragraph>
                 </Card>
               )}
             </Space>

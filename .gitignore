@@ -15,6 +15,7 @@ __pycache__/
 data/*.db
 data/simulated/*.csv
 data/simulated/*.jsonl
+data/corpus/
 data/models/*
 !data/models/.gitkeep
 data/vectorstore/*
