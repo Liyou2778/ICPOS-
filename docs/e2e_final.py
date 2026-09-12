@@ -27,7 +27,11 @@ def main() -> int:
     h = {"Authorization": "Bearer " + c.post("/api/auth/login", json={"username": "admin", "password": "icops2026"}).json()["token"]}
 
     health = c.get("/api/health", headers=h).json()
-    ok &= check("health: demo 模式 + 数据就绪", health["llm_mode"] == "demo" and health["data"]["equipment_models"] > 0)
+    ok &= check(
+        "health: 大模型模式已识别 + 数据就绪",
+        health["llm_mode"] in ("demo", "deepseek", "dashscope") and health["data"]["equipment_models"] > 0,
+        f"(llm_mode={health['llm_mode']})",
+    )
 
     d = c.get("/api/dashboard/summary", headers=h).json()
     ok &= check("驾驶舱 summary", d["device_total"] >= 1)

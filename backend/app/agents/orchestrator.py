@@ -195,8 +195,9 @@ class Orchestrator:
     def route(self, db: Session, session: ChatSession | None, user_text: str) -> AgentArtifact:
         # ---------- 会话需求槽位：跨轮抽取/合并（数字来自规则引擎，不经过大模型） ----------
         state = dict(session.state or {}) if session is not None else {}
+        prev_slots = dict(state.get("slots") or {})
         extracted = slot_svc.slots_from_text(user_text)
-        slots = slot_svc.merge_slots(state.get("slots"), extracted)
+        slots = slot_svc.merge_slots(prev_slots, extracted)
         pending = state.get("pending_intent")
         if pending and not extracted:
             miss = slot_svc.missing_slots(slots)
@@ -204,6 +205,7 @@ class Orchestrator:
                 v = slot_svc.interpret_bare_value(user_text, miss[0])
                 if v is not None:
                     slots = slot_svc.merge_slots(slots, {miss[0]: v})
+        slots_changed = slots != prev_slots  # 本次消息是否真的补充了槽位
         patch: dict = {"slots": slots}
 
         def out(art: AgentArtifact) -> AgentArtifact:
@@ -231,7 +233,10 @@ class Orchestrator:
             return out(dispatch_agent.handle(db, user_text))
         if intent == "maintenance":
             return out(maintenance_agent.handle(db, user_text))
-        if intent == "solution" or (pending and pending.get("agent") == "solution"):
+        # 待续任务（缺参阻塞后）仅在“本次消息确实是补充”时续跑，避免劫持无关提问
+        supplement_words = ("继续", "生成方案", "开始生成", "可以了", "补全", "接着")
+        is_supplement = slots_changed or _has(user_text, supplement_words)
+        if intent == "solution" or (pending and pending.get("agent") == "solution" and is_supplement):
             doc_type = (pending or {}).get("doc_type") or "construction"
             if _has(user_text, ("投标", "招标", "竞标")):
                 doc_type = "bid"
