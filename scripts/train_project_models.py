@@ -283,7 +283,7 @@ def evaluate_cost(costs: pd.DataFrame, projects: list[str]) -> dict:
     else:
         ratio_stats = None
 
-    return {
+    report = {
         "cost_type_order": COST_TYPES,
         "global_share_baseline": {c: round(float(global_share[c]), 4) for c in COST_TYPES},
         "lopo_mape_pct_mean": round(float(np.mean(lopo_err)), 2) if lopo_err else None,
@@ -294,6 +294,18 @@ def evaluate_cost(costs: pd.DataFrame, projects: list[str]) -> dict:
         "n_train_projects": len(train_p),
         "n_test_projects": len(test_p),
     }
+    # 训练集上拟合的最终模型随产物一并落盘（供审计；是否启用由门控决定）
+    final_model = Ridge(alpha=1.0).fit(feat.loc[train_p], shares.loc[train_p])
+    artifact = {
+        "model": final_model,
+        "feature_cols": list(feat.columns),
+        "cost_types": COST_TYPES,
+        "train_projects": train_p,
+        "global_share_baseline": global_share.to_dict(),
+        "note": "成本构成占比模型（Ridge）。本语料下未跑赢全局均值基线，门控关闭，不参与生产输出；"
+        "生产使用 baseline_model.json 中的结构容差带。",
+    }
+    return report, artifact
 
 
 def build_baseline_model(tasks: pd.DataFrame, costs: pd.DataFrame, train_projects: list[str]) -> dict:
@@ -376,7 +388,7 @@ def main() -> int:
     assert not set(train_projects) & set(test_projects), "训练/测试项目交叉，禁止评估"
 
     task_metrics = evaluate_task(X, y, task_projects, train_projects, test_projects)
-    cost_metrics = evaluate_cost(costs, train_projects)
+    cost_metrics, cost_artifact = evaluate_cost(costs, train_projects)
 
     import joblib
 
@@ -389,6 +401,7 @@ def main() -> int:
     ).fit(X[tr_mask], y["delay_class"][tr_mask])
     joblib.dump(reg, OUT / "task_delay_reg.joblib")
     joblib.dump(clf, OUT / "task_delay_clf.joblib")
+    joblib.dump(cost_artifact, OUT / "cost_structure.joblib")
 
     baseline = build_baseline_model(tasks, costs, train_projects)
     (OUT / "baseline_model.json").write_text(
@@ -457,6 +470,13 @@ def main() -> int:
                 "feature_cols": list(X.columns),
                 "classes": CLASSES,
                 "cost_types": COST_TYPES,
+                "cost_feature_cols": cost_artifact["feature_cols"],
+                "artifacts": {
+                    "task_delay_reg.joblib": "工期偏差回归（门控未启用）",
+                    "task_delay_clf.joblib": "工期三分类（门控未启用）",
+                    "cost_structure.joblib": "成本构成占比模型（门控未启用，仅供审计）",
+                    "baseline_model.json": "生产使用的标定基准",
+                },
                 "trained_at": report["trained_at"],
                 "train_projects": train_projects,
                 "test_projects": test_projects,

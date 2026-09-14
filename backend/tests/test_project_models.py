@@ -42,6 +42,7 @@ def test_artifacts_exist_and_loadable():
     for name in (
         "task_delay_reg.joblib",
         "task_delay_clf.joblib",
+        "cost_structure.joblib",
         "meta.json",
         "eval_report.json",
         "baseline_model.json",
@@ -49,11 +50,17 @@ def test_artifacts_exist_and_loadable():
         assert (MODEL_DIR / name).exists(), f"缺少产物 {name}"
     reg = joblib.load(MODEL_DIR / "task_delay_reg.joblib")
     clf = joblib.load(MODEL_DIR / "task_delay_clf.joblib")
+    cost = joblib.load(MODEL_DIR / "cost_structure.joblib")
     assert hasattr(reg, "predict") and hasattr(clf, "predict_proba")
+    # 成本模型产物必须自带门控说明，避免被误当作生产模型使用
+    assert hasattr(cost["model"], "predict")
+    assert cost["cost_types"] == ["人工", "材料", "机械", "其他", "管理"]
+    assert "门控关闭" in cost["note"]
     meta = json.loads((MODEL_DIR / "meta.json").read_text(encoding="utf-8"))
     assert meta["classes"] == ["提前", "准时", "延期"]
     assert meta["cost_types"] == ["人工", "材料", "机械", "其他", "管理"]
     assert meta["feature_cols"], "特征清单不得为空"
+    assert "cost_structure.joblib" in meta["artifacts"]
 
 
 def test_no_label_leakage_in_features(report):
