@@ -51,6 +51,29 @@ def main() -> int:
 
     llm = c.get("/api/llm/status").json()
     print(f"大模型: mode={llm['mode']}")
+
+    # 项目运营分析（前端页面 + 接口 + 上线门控）
+    page = c.get("/projects")
+    ok &= page.status_code == 200 and 'id="root"' in page.text
+    pj = c.get("/api/projects/analytics/summary").json()
+    band = pj.get("budget_execution_band") or {}
+    print(
+        f"项目运营: 项目 {pj['projects']['total']} 个（锚点 {pj['projects']['with_tender_anchor']}）/ "
+        f"成本台账 {(pj['cost']['total_yuan'] / 1e4):,.1f} 万元 / "
+        f"生产方法 {pj['deploy']['production_method']}"
+    )
+    print(f"  预算执行区间: P25 {band.get('p25')} / P50 {band.get('p50')} / P75 {band.get('p75')}")
+    ok &= pj["projects"]["total"] >= 1 and bool(pj["data_boundary"])
+    rows = c.get("/api/projects/analytics/projects").json()["projects"]
+    target = next((p for p in rows if p["section_est_total_yuan"] > 0), None)
+    ok &= bool(rows)
+    if target:
+        cs = c.get(f"/api/projects/analytics/cost-structure/{target['code']}")
+        anchor = c.get(f"/api/projects/analytics/tender-anchor/{target['code']}")
+        print(f"  抽样项目 {target['code']}: 成本构成 {cs.status_code} / 招标锚点 {anchor.status_code} / "
+              f"台账 {cs.json()['total_cost_yuan'] / 1e4:,.2f} 万元")
+        ok &= cs.status_code == 200 and anchor.status_code == 200
+    ok &= c.get("/api/projects/analytics/model-report").status_code == 200
     print("=" * 56)
     print("自检结果：", "全部通过 ✅" if ok else "存在失败 ❌")
     return 0 if ok else 1

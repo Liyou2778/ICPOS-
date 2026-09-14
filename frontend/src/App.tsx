@@ -8,6 +8,7 @@ import MapMonitor from './pages/MapMonitor';
 import Workspace from './pages/Workspace';
 import ChatCenter from './pages/ChatCenter';
 import Maintenance from './pages/Maintenance';
+import ProjectOps from './pages/ProjectOps';
 import NotFound from './pages/NotFound';
 
 function RequireAuth({ children }: { children: JSX.Element }) {
@@ -35,6 +36,7 @@ export default function App() {
         <Route path="workspace" element={<Workspace />} />
         <Route path="chat" element={<ChatCenter />} />
         <Route path="maintenance" element={<Maintenance />} />
+        <Route path="projects" element={<ProjectOps />} />
       </Route>
       <Route path="*" element={<NotFound />} />
     </Routes>

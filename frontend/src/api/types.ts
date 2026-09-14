@@ -290,3 +290,45 @@ export interface CorpusPrediction {
   note?: string;
   model_note?: string;
 }
+
+// ---------- 项目运营分析 ----------
+export interface ProjectRow {
+  code: string;
+  name: string;
+  industry: string;
+  region: string;
+  data_type: string;
+  section_est_total_yuan: number;
+  plan_invest_yuan: number;
+  duration_days: number;
+  total_cost_yuan: number;
+  cost_to_budget_ratio: number | null;
+}
+
+export interface CostStructureItem {
+  cost_type: string;
+  amount_yuan: number;
+  share_pct: number;
+  baseline_mean_pct: number | null;
+  band_pct: (number | null)[];
+  deviation_pp: number | null;
+  verdict: string;
+}
+
+export interface CostStructure {
+  project: { code: string; name: string; industry: string; region: string; data_type: string };
+  periods: string[];
+  total_cost_yuan: number;
+  items: CostStructureItem[];
+  out_of_band: string[];
+  budget_execution: {
+    section_est_total_yuan: number;
+    total_cost_yuan: number;
+    ratio: number;
+    band: { p25: number; p50: number; p75: number; p90: number };
+    level: string;
+  } | null;
+  conclusion: string;
+  basis: string;
+  disclaimer: string;
+}

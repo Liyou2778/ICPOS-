@@ -142,23 +142,84 @@ $env:PYTHONUTF8='1'
   立体轨迹回放（TubeGeometry），OrbitControls 交互（旋转/平移/缩放）。
 - 完全离线、零外部依赖（不依赖底图瓦片），断网可演示；WebSocket 实时位置继续驱动 3D 标记。
 
+### 3.4 工程项目运营语料管线（真实招标锚点 + 成本台账 + 模型评估）
+
+把两份工程项目运营语料（`data/corpus/{project_train,project_test}.jsonl`，各 376 行）治理入库并做企业级建模评估：
+
+```powershell
+.\.venv\Scripts\python.exe -m scripts.diagnose_project_corpus      # 体检：类型分布/字段覆盖/项目级泄漏风险
+.\.venv\Scripts\python.exe -m scripts.ingest_project_corpus --strict  # ETL：幂等入库 + 血缘清单（SHA-256）
+.\.venv\Scripts\python.exe -m scripts.diagnose_project_signal      # 可学习性诊断（决定是否上线 ML 的取证）
+.\.venv\Scripts\python.exe -m scripts.train_project_models         # 训练 + 门控评估 + 标定基准
+```
+
+**语料结构（三类记录，train/test 按项目划分且零交叉）**
+
+| 类型 | 条数 | 真实性 | 内容 |
+|---|---|---|---|
+| `project_budget` | 27（去重 22 项目） | **real** | 内蒙古公共资源交易网招标公告锚点：招标人/行业/地区/平台/计划投资/标段预算/工期/资金来源/公告链接 |
+| `construction_task` | 340 | simulated | 按锚点仿真的五道工序任务（穿孔/爆破/铲装/运输/排土）：排期、工作量、班组、设备、状态 |
+| `actual_cost` | 385 | simulated | 按锚点仿真的成本台账：人工/材料/机械/其他/管理，合计 57,069.5 万元 |
+
+**ETL 产出（实测）**：唯一记录 752 条（跨文件重复 0）；项目 22 个（train 11 / test 11，交叉 0）；
+任务 340 条；成本台账 385 条；血缘清单 `data/corpus/project_manifest.json`（文件 SHA-256、行数、类型分布、去重数）
+与入库报告 `data/corpus/project_ingest_report.json`。ETL 为**收敛式 upsert**：重跑不新增记录、不产生重复键，
+库内状态指纹（`test_project_corpus_etl.py::_fingerprint`）逐位一致。
+
+**建模与评估协议（防泄漏）**：特征仅取计划侧信息（工序/阶段/循环/计划工期/工作量/班组/设备数/项目规模），
+**严禁使用 `actual_start`/`actual_end`/`status`**；训练只用 train 项目，训练集内做
+Leave-One-Project-Out 交叉验证并报 95% 置信区间，独立 test 项目仅最终评估一次、阈值固定不调参，
+全部指标与朴素基线（中位数/多数类/全局均值占比）对照。
+
+**评估结论（`data/models/project/eval_report.json`，如实结论优先于"有模型"）**：
+- 工期偏差回归：测试集 MAE **2.248 天** > 中位数基线 **1.127 天**，R² **-0.488**；LOPO MAE 2.570 天（95%CI 1.606~3.533）；
+- 工期三分类：准确率 0.841 = 多数类基线 0.841（macro-F1 0.540），无增益；
+- 成本构成：LOPO MAPE **23.91%** > 全局均值基线 **14.73%**；
+- 可学习性取证（`scripts/diagnose_project_signal.py`）：训练集 R² 0.9988 而 5 折 CV R² ≈ **-1.98**（只记住噪声）、
+  单特征最大 |r| **0.12**、工序组间 eta² **0.042** ⇒ 该语料延期标签为噪声生成，**不存在可泛化信号**。
+
+**上线门控（自动、可审计）**：`deploy_decision.ml_deployed` 仅在"测试集优于基线 **且** LOPO 置信区间上界优于基线"
+时为真；本次为 **false**，生产方法记为 `calibrated_statistical_baseline`，ML 产物保留但不启用。
+pytest `test_project_models.py::test_deploy_gate_is_consistent_with_evidence` 会校验结论与证据严格等价，
+防止事后手改结论。
+
+**生产方案（标定统计基准，避免把统计分布包装成"预测"）**
+- 工期缓冲：历史偏差分位数 P80 = 1 天、P90 = 3 天（按工序分列，样本 <8 不单列）；
+- 成本结构：五类占比基准（机械 36.9% / 材料 29.8% / 人工 17.2% / 管理 8.8% / 其他 7.4%），
+  实测落在 P25~P75 容差带内为正常，越界提示结构偏差；
+- 预算执行：合同额/标段预算 P25 0.900 / P50 0.950 / P75 1.105（预警）/ P90 1.175（严重偏差）。
+
+**集成与前端**：`services/project_analytics.py` + 7 个接口（`/api/projects/analytics/{summary,projects,model-report,
+tender-anchor/{code},cost-structure/{code}}`、`POST cost-forecast`、`POST task-delay-risk`）；
+项目语料以 `kb_type=project` 入向量库（26 分块）供 RAG 引用；新增**项目运营智能体**承接项目类问答
+（招标锚点/成本构成/预算执行/成本测算），数字全部数据库直读、附口径与免责声明；
+前端「项目运营分析」页（`/projects`）展示组合看板、成本结构 vs 容差带、预算执行区间、成本测算、
+工期缓冲与**评估报告与数据边界**。
+
+**数据边界（必须随交付声明）**：`project_budget` 为公开招标公告真实数据；`construction_task`/`actual_cost`
+为按锚点仿真生成，**不是真实施工记录**；样本量小（已完工可标注任务 126 条 / 项目 20 个 / 台账 385 条），
+置信区间宽，结论不可外推为行业规律；所有输出定位为决策参考，需人工确认。
+
 ## 4. 启动 / 测试 / 验收
 ```powershell
 # 启动
 .\.venv\Scripts\python.exe -m uvicorn backend.app.main:app --reload
 # http://127.0.0.1:8000/docs · 演示账号 admin/icops2026（另有 sales、dispatcher、service、mine）
 
-# 验收用例（pytest 30 项：PRD 验收标准 + 五幕剧情链路）
+# 验收用例（pytest 57 项：PRD 验收标准 + 五幕剧情链路 + 项目运营语料/模型/接口）
 .\.venv\Scripts\python.exe -m pytest -q
 
 # 端到端冒烟（需服务已启动；默认连 8001，可在脚本内改 BASE）
 .\.venv\Scripts\python.exe docs\smoke_e2e.py
 
-# 最终端到端（SPA + 全接口 + SSE + WebSocket）
+# 最终端到端（SPA + 全接口 + SSE + WebSocket，16 项）
 .\.venv\Scripts\python.exe docs\e2e_final.py http://127.0.0.1:8000
 
-# Agent 问答探测（14 类场景）
+# Agent 问答探测（18 类场景，含 4 项项目运营）
 .\.venv\Scripts\python.exe docs\agent_qa_probe.py http://127.0.0.1:8000
+
+# 前端资源与关键接口自检（含项目运营页/接口/门控）
+.\.venv\Scripts\python.exe scripts\verify_ui_assets.py http://127.0.0.1:8000
 
 # 前端（typecheck / lint / build）
 cd frontend && npm run lint && npm run build
@@ -168,7 +229,7 @@ uv run ruff check backend scripts data/simulator
 uv run ruff format backend scripts data/simulator
 ```
 
-### 30 项 pytest 覆盖（PRD 验收标准 + 五幕剧情链路映射）
+### 57 项 pytest 覆盖（PRD 验收标准 + 五幕剧情链路 + 项目运营语料/模型）
 
 - `test_selection.py`：需求解析（完整/缺失追问）、≥3 套方案、TCO 四类、数值仅出自参数库、预算约束
 - `test_dispatch.py`：派单可解释原因、重调度排除故障车、确认下发生成派单、A/B 空载率下降 ≥15%
@@ -177,6 +238,13 @@ uv run ruff format backend scripts data/simulator
 - `test_api.py`：登录/健康/驾驶舱、方案 plan、投标响应度检查、对话历史、**SSE 流式**、调度 A/B、诊断/工单、KB 检索
 - `test_e2e_story.py`：五幕剧情链路（登录+驾驶舱契约 / 方案/投标/导出 / 调度+轨迹+地图契约 /
   运维预警-诊断-工单-预测契约 / SSE 多轮对话与持久化）
+- `test_ops_chat_flow.py`（批一）：槽位阻塞与补录续跑、会话归档/恢复、工单六状态机流转、设备运营、维修归档
+- `test_project_corpus_etl.py`（项目语料）：**幂等**（重跑零新增 + 无重复键 + 库内状态指纹逐位一致）、
+  **泄漏**（train/test 项目零交叉、SHA-256 血缘齐备）、**规范化**（金额单位/日期格式/成本类型枚举/排期先后）
+- `test_project_models.py`（项目模型）：**特征泄漏扫描**（禁 actual_*/status）、协议完整性（LOPO + 独立测试 + 基线）、
+  **门控自洽**（结论必须由证据严格推导）、标定分位数单调性与容差带合理性
+- `test_project_analytics.py`（项目接口）：契约与错误码、**接口金额与台账逐条一致**、容差带判定逻辑、
+  测算区间有序性、工期风险为分布而非预测、项目类问题路由到 project 智能体且数字数据库直读
 
 ### Web 前端（React 18 · TypeScript · Vite · AntD5 · ECharts）
 
@@ -224,6 +292,7 @@ uv run ruff format backend scripts data/simulator
 | 调度 | `POST /api/dispatch/run`、`POST /api/dispatch/confirm`、`GET /api/dispatch/ab`、`GET /api/dispatch/trajectory` | 派单/确认/对比/轨迹 |
 | 运维 | `POST /api/maintenance/diagnose`、`POST /api/maintenance/workorders`、`GET /api/maintenance/warnings|workorders`、`GET /api/maintenance/predict/{code}` | 诊断/工单/预警/预测 |
 | 知识库 | `GET /api/kb/search|models|faults|stats` | RAG 与直读 |
+| 项目运营 | `GET /api/projects/analytics/summary|projects|model-report`、`GET …/tender-anchor/{code}`、`GET …/cost-structure/{code}`、`POST …/cost-forecast`、`POST …/task-delay-risk` | 组合看板/招标锚点/成本构成/成本测算/工期缓冲/评估报告 |
 
 ## 6. 已知口径与限制（答辩口径统一使用）
 
@@ -233,5 +302,11 @@ uv run ruff format backend scripts data/simulator
    且附人工确认标注；填入 Key 即自动切换真实双供应商。
 3. PDF 导出依赖 LibreOffice（未装仅 Word，已自动降级）；Chroma 未安装自动降级内置向量库。
 4. 地图默认自有坐标渲染；启用高德真实地图需 `AMAP_KEY`（前端 v2 能力位预留）。
-5. 前端 dist 与生成数据（`data/*.db`、模拟 CSV、模型产物、向量库）不入版本库，
+5. 前端 dist 与生成数据（`data/*.db`、模拟 CSV、模型产物、向量库、`data/corpus/`）不入版本库，
    克隆后执行 `tools\start-icops.bat` 或手动管线即可重建（保证可复现）。
+6. **项目运营模型未上线 ML**：工期与成本构成模型在独立测试集上均未跑赢朴素基线
+   （证据：测试 MAE 2.248 天 > 基线 1.127 天、LOPO/5 折 CV R² < 0、单特征最大 |r| 0.12），
+   故生产采用标定统计基准（分位数缓冲 + 结构容差带 + 预算执行区间），ML 产物保留但门控关闭；
+   接口与前端均显式标注"标定基准法，非 ML 预测"，不得对外表述为"AI 预测工期/成本"。
+7. **项目语料真实性边界**：招标锚点（计划投资/标段预算/中标金额/工期/资金来源）为真实公告数据，
+   可溯源至公告链接；施工任务与成本台账为按锚点仿真生成，**引用时必须同时说明**，不得混同为真实施工记录。

@@ -136,14 +136,97 @@ def index_templates(db: Session, tpl_dir: Path) -> int:
     return total
 
 
+def index_project_corpus(db: Session) -> int:
+    """项目运营库（真实招标锚点 + 成本台账 + 标定基准）：按项目建档，可溯源到公告链接。
+
+    数据边界：project_budget 为公开招标公告锚点（real）；施工任务/成本台账为按锚点仿真生成
+    （simulated），文档内显式标注，避免被当作真实施工记录引用。
+    """
+    from backend.app.services import project_analytics as pj
+
+    if not pj.artifacts_ready():
+        logger.warning("项目分析基准缺失，跳过项目运营库入库（请先运行 train_project_models）")
+        return 0
+    total = 0
+    for p in pj.project_list(db, limit=500):
+        anchor = pj.tender_anchor(db, p["code"])
+        parts = [
+            f"项目编号：{anchor['code']}",
+            f"项目名称：{anchor['name']}",
+            f"招标人：{anchor['tenderer'] or '—'}",
+            f"行业：{anchor['industry'] or '—'}",
+            f"地区：{anchor['region'] or '—'}",
+            f"交易平台：{anchor['platform'] or '—'}",
+            f"公告日期：{anchor['publish_date'] or '—'}",
+            f"计划总投资：{anchor['plan_invest_yuan']:.0f} 元",
+            f"标段预算合计：{anchor['section_est_total_yuan']:.0f} 元",
+            f"中标金额：{anchor['win_amount_yuan']:.0f} 元",
+            f"计划工期：{anchor['duration_days']} 天",
+            f"资金来源：{anchor['funding_source'] or '—'}",
+            f"批复单位：{anchor['approval_authority'] or '—'}",
+            f"数据口径：{anchor['budget_scope'] or '公告原文口径'}",
+        ]
+        if p["total_cost_yuan"]:
+            cs = pj.cost_structure(db, p["code"])
+            parts.append(f"成本台账合计：{cs['total_cost_yuan']:.0f} 元（期间 {'、'.join(cs['periods'])}）")
+            parts.append(
+                "成本构成："
+                + "；".join(
+                    f"{i['cost_type']} {i['share_pct']}%（基准 {i['baseline_mean_pct']}%，容差带 "
+                    f"{i['band_pct'][0]}~{i['band_pct'][1]}%，判定 {i['verdict']}）"
+                    for i in cs["items"]
+                )
+            )
+            if cs.get("budget_execution"):
+                be = cs["budget_execution"]
+                parts.append(
+                    f"预算执行比率：{be['ratio']:.4f}，判定 {be['level']}"
+                    f"（历史 P25~P75：{be['band']['p25']}~{be['band']['p75']}）"
+                )
+            parts.append(f"分析结论：{cs['conclusion']}")
+        parts.append(
+            "数据边界：招标锚点为公开公告真实数据；施工任务与成本台账为按其仿真生成，"
+            "用于方法验证，不代表真实施工记录。"
+        )
+        content = "。".join(parts) + "。"
+        total += rag.index_entry(
+            db,
+            "project",
+            f"项目运营档案：{anchor['code']} {anchor['name']}",
+            content,
+            tags="项目,招标,标段预算,成本构成,预算执行",
+            source=anchor["source_url"] or f"project_corpus:{anchor['code']}",
+            version="V1.0",
+        )
+    total += rag.index_entry(
+        db,
+        "project",
+        "项目运营分析方法与模型评估结论",
+        "项目成本分析与工期缓冲采用标定统计基准法（calibrated_statistical_baseline），"
+        "不使用机器学习逐任务预测。评估协议：按项目划分训练/测试（零交叉），训练集内"
+        "Leave-One-Project-Out 交叉验证，独立测试集仅最终评估一次，全部指标与朴素基线对照。"
+        "评估结论：工期偏差回归在测试集 MAE 大于中位数基线、LOPO/5 折交叉验证 R² 小于 0，"
+        "单特征最大相关系数约 0.12，训练 R² 约 0.999（仅记忆噪声）；因此 ML 未通过上线门控。"
+        "生产方法：工期采用历史偏差分位数缓冲（P80 作为缓冲建议），成本采用结构占比 P25~P75 "
+        "容差带与预算执行比率分位数（P75 预警、P90 严重偏差）。"
+        "数据边界：标签为按真实招标锚点仿真生成，样本量小（已完工任务约 126 条、项目 20 个、"
+        "成本台账 385 条），结论不可外推为行业规律，输出仅作决策参考并需人工确认。",
+        tags="项目,成本分析,模型评估,上线门控,数据边界",
+        source="data/models/project/eval_report.json",
+        version="V1.0",
+    )
+    return total
+
+
 def build_all_knowledge(db: Session) -> dict:
-    """一键执行四大库 + 向量化入库，返回统计（scripts/build_kb.py 调用）。"""
+    """一键执行五大库 + 向量化入库，返回统计（scripts/build_kb.py 调用）。"""
     root = settings.repo_root
     stats: dict = {}
     stats["equipment"] = load_equipment_models(db, root / "data" / "knowledge" / "equipment_models.csv")
     stats["fault_codes"] = load_fault_codes(db, root / "data" / "knowledge" / "maintenance_knowledge.csv")
     stats["process_chunks"] = index_process_markdown(db, root / "data" / "knowledge")
     stats["template_chunks"] = index_templates(db, root / "data" / "knowledge" / "templates")
+    stats["project_chunks"] = index_project_corpus(db)
     store = vector_store_count()
     stats["vector_entries"] = store
     return stats

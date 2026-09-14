@@ -70,6 +70,12 @@ uv sync
 .\.venv\Scripts\python.exe -m scripts.ingest_corpus         # ETL：+138 型号 / 1190 知识条目 / 112k 行训练集
 .\.venv\Scripts\python.exe -m scripts.train_models_corpus   # 机理分组多检测器（P1 检出 10/10，提前量 24.3h）
 
+# 工程项目运营语料管线（可选：project_{train,test}.jsonl → 项目运营库 + 模型评估/标定基准）
+.\.venv\Scripts\python.exe -m scripts.ingest_project_corpus --strict      # ETL：22 项目 / 340 任务 / 385 成本台账
+.\.venv\Scripts\python.exe -m scripts.diagnose_project_signal             # 可学习性取证（决定是否上线 ML）
+.\.venv\Scripts\python.exe -m scripts.train_project_models                # 评估 + 上线门控 + 标定基准
+.\.venv\Scripts\python.exe -m scripts.build_kb                            # 重跑知识库以纳入项目运营库(kb_type=project)
+
 # 前端（修改页面热更新）
 cd frontend
 npm install && npm run dev      # http://127.0.0.1:5173（/api、/ws 已代理到 8000）
@@ -89,8 +95,9 @@ npm run build                   # 产物 frontend/dist，单源托管由后端�
 | 💬 客户交互智能体 | 意图路由（需求/方案/调度/运维/状态/知识问答/转人工/方案追问）、**需求槽位跨轮记忆**、缺参阻塞式清单追问 + 补录后自动续跑、会话归档/恢复/重命名、SSE 流式、引用溯源 | 14 项标准问答全过；补录续跑与归档有 pytest 覆盖 |
 | 🧠 知识库 + RAG | 设备参数(12) / 工艺(6) / 维保(54) / 模板(3)，向量+关键词混合检索、句级摘要 | 参数直读 100%、检索 20/20（≥80%） |
 | 🎛 防幻觉三道防线 | 数字不出模型、陈述必有出处、人工确认标注；知识库外问题拒答转人工 | 生成内容一律附"AI 生成初稿，需人工确认" |
-| 🖥 Web 前端 | 驾驶舱、**方案工作台（三步向导 + AI 侧栏 + 参数实时重算）**、设备地图（**离线 Three.js 真 3D** / 高德 / 2.5D 三模式）、智能对话、**智能运维五区** | 与后端单源托管/代理打通 |
+| 🖥 Web 前端 | 驾驶舱、**方案工作台（三步向导 + AI 侧栏 + 参数实时重算）**、设备地图（**离线 Three.js 真 3D** / 高德 / 2.5D 三模式）、智能对话、**智能运维五区**、**项目运营分析** | 与后端单源托管/代理打通 |
 | 🛠 智能运维全链路 | 设备运营（台账/利用率·工时·能耗/健康评分/保养到期/备件预警）、预警中心（融合 v1 与语料模型）、智能诊断、**工单六状态流转 + 时间线留痕**、维修归档（MTTR/故障分布/备件消耗/复发） | 六状态机仅允许向前推进 |
+| 🏗 项目运营分析 | **真实招标锚点**（计划投资/标段预算/中标金额/工期/资金来源/公告溯源）、成本构成 vs 标定容差带、预算执行预警、成本结构测算、工序交期缓冲、**评估报告与数据边界可视化** | 模型未过门控 → 生产用标定基准；接口金额与台账逐条一致 |
 | 📡 实时能力 | REST / SSE 对话流 / WebSocket 设备推送（≤10s） | `/ws/telemetry` 每 5s 推送设备快照 |
 
 ## 🗂 目录结构
@@ -98,12 +105,13 @@ npm run build                   # 产物 frontend/dist，单源托管由后端�
 ```
 ├── backend/                 # FastAPI 后端
 │   └── app/{api,agents,core,models,schemas,services}
-├── frontend/                # React 18 + TS + Vite + AntD + ECharts（src/pages 五大页面）
+├── frontend/                # React 18 + TS + Vite + AntD + ECharts（src/pages 六大页面）
 ├── data/
 │   ├── knowledge/           # 四大知识库种子源（CSV/MD/JSON）
 │   ├── simulator/           # 30 天矿山模拟数据生成器（预埋故障前兆）
-│   └── models/              # 预测模型产物 + 评估报告（train_models 生成）
-├── scripts/                 # build_kb / load_demo / quality_check / train_models
+│   ├── corpus/              # 外部语料（gitignore）：设备/遥测语料 + 工程项目运营语料 + 血缘清单
+│   └── models/              # 预测模型产物 + 评估报告（train_models / train_models_corpus / train_project_models 生成）
+├── scripts/                 # build_kb / load_demo / quality_check / train_* / ingest_* / diagnose_* / verify_ui_assets
 ├── tools/                   # Windows 一键启动器（start-icops.bat / launcher.ps1）
 ├── deploy/                  # .env.example / docker-compose.yml / Caddyfile（演示部署参考）
 ├── docs/                    # 开发验收手册 + deliverables（参赛交付物：演示脚本/架构/质证口径等）
@@ -114,18 +122,19 @@ npm run build                   # 产物 frontend/dist，单源托管由后端�
 
 - [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md) —— 开发/验收手册（环境、命令、接口、限制口径）
 - [`docs/deliverables/`](docs/deliverables/) —— 参赛交付物：五幕演示脚本、系统架构、指标质证口径、
-  交付包核对清单、答辩预设质询
+  交付包核对清单、答辩预设质询、**[项目运营分析方法与数据边界](docs/deliverables/05_项目运营分析方法与数据边界.md)**
 - 评审现场操作可直接按 [`五幕演示脚本`](docs/deliverables/00_演示脚本五幕.md) 走查
 
 ## 🧪 本仓库自测结果（模拟数据口径，全部可复现）
 
 | 项目 | 结果 | 复现命令 |
 |---|---|---|
-| 后端验收用例（pytest，含五幕剧情链路） | ✅ 30 passed | `.venv\Scripts\python.exe -m pytest -q` |
-| 后端代码质量 | ✅ ruff check / format 通过 | `uv run ruff check backend scripts data/simulator` |
+| 后端验收用例（pytest，含五幕剧情 + 项目语料/模型/接口） | ✅ 57 passed | `.venv\Scripts\python.exe -m pytest -q` |
+| 后端代码质量 | ✅ ruff check / format 通过 | `uv run ruff check backend scripts docs` |
 | 前端 | ✅ typecheck + eslint + build 通过 | `cd frontend && npm run lint && npm run build` |
 | 端到端（SPA+16 项接口/SSE/WS） | ✅ 全部通过 | `python docs/e2e_final.py` |
-| Agent 问答（14 类场景） | ✅ 14/14 | `python docs/agent_qa_probe.py` |
+| Agent 问答（18 类场景，含 4 项项目运营） | ✅ 18/18 | `python docs/agent_qa_probe.py` |
+| 前端资源与关键接口自检 | ✅ 全部通过 | `python scripts/verify_ui_assets.py` |
 | 方案生成 | ✅ 3 套 / ~0.01s | `/api/solutions/plan` |
 | 投标响应度 | ✅ 6 章节全部已响应 | pytest `test_e2e_story.py` |
 | 参数直读 / RAG 检索 | ✅ 100% / 100% | `scripts.quality_check --strict` |
@@ -133,10 +142,16 @@ npm run build                   # 产物 frontend/dist，单源托管由后端�
 | 空载率下降 | ✅ -76.2%（27.0%→6.4%） | `/api/dispatch/ab` |
 | 语料知识库扩充 | ✅ +138 型号 / 1190 知识条目 / 2620 向量 | `scripts/ingest_corpus` |
 | 语料模型（企业级，13 台设备×112k 遥测×12 故障） | ✅ P1 检出 10/10、提前量 24.3h、部件 Top1 90%、误报 2.0% | `data/models/corpus/eval_report.json` |
+| 项目运营语料 ETL | ✅ 22 项目（train 11 / test 11，零交叉）/ 340 任务 / 385 台账（57,069.5 万元）；重跑零新增且状态指纹一致 | `scripts/ingest_project_corpus --strict` |
+| 项目工期/成本模型（**诚实结论：未过上线门控**） | ⚠️ 测试 MAE 2.248 天 > 基线 1.127 天、R² -0.488；成本 LOPO MAPE 23.9% > 基线 14.7% → **不上线 ML**，生产改用标定基准 | `data/models/project/eval_report.json` |
+| 项目运营分析（生产方案） | ✅ 工期缓冲 P80 1 天 / P90 3 天；成本结构容差带 P25~P75；预算执行 P75 1.105 预警、P90 1.175 严重 | `/api/projects/analytics/summary` |
 
 > ⚠️ **口径说明**：MVP 按"模拟先行"策略以仿真数据验证（指导书 5.2 / PRD §4.2 范围外）；
 > 真实设备 IoT 接入与模型迁移列入 V1.1 试点；生成内容均附"需人工确认"标注。
 > 地图默认用自有坐标渲染（离线可靠），`.env` 填 `AMAP_KEY` 后可切高德真实地图。
+> **项目运营数据边界**：招标锚点为公开公告真实数据（可溯源公告链接）；施工任务与成本台账为按锚点仿真生成，
+> **不是真实施工记录**；样本量小（已完工可标注任务 126 条 / 项目 20 个），结论不可外推，输出仅作决策参考。
+> **工期与成本不得宣传为"AI 预测"**：模型在独立测试集上未跑赢朴素基线（见上表），生产方法为标定统计基准。
 
 ## 🧭 路线图
 

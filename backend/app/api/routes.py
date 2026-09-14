@@ -47,6 +47,7 @@ from backend.app.services.predictive_corpus import (
     corpus_faults,
     predict_corpus_device,
 )
+from backend.app.services import project_analytics as pj
 from backend.app.services.vectorstore import vector_store
 
 logger = logging.getLogger("icops.api")
@@ -595,3 +596,79 @@ def workorder_get(code: str, db: Session = Depends(get_db)):
 def maintenance_archive(db: Session = Depends(get_db)):
     """维修归档：归档工单 + MTTR / 故障分布 / 备件消耗 / 复发统计。"""
     return archive_stats(db)
+
+
+# ---------------- 项目运营分析（招标锚点 / 成本构成 / 预算执行 / 工期缓冲） ----------------
+@router.get("/projects/analytics/summary")
+def project_analytics_summary(db: Session = Depends(get_db)):
+    """项目组合看板：投资规模、成本构成与基准对照、任务完工情况、上线决策与数据边界。"""
+    if not pj.artifacts_ready():
+        raise HTTPException(409, "项目分析基准缺失：请先执行 python -m scripts.train_project_models")
+    return pj.summary(db)
+
+
+@router.get("/projects/analytics/projects")
+def project_analytics_projects(limit: int = 100, db: Session = Depends(get_db)):
+    """项目清单（含标段预算、实际成本、预算执行比率）。"""
+    return {"projects": pj.project_list(db, limit=limit), "ready": pj.artifacts_ready()}
+
+
+@router.get("/projects/analytics/model-report")
+def project_analytics_model_report():
+    """模型评估报告与上线门控证据（含为何不上线 ML 的完整证据链）。"""
+    rep = pj.model_report()
+    if not rep:
+        raise HTTPException(409, "评估报告不存在：请先执行 python -m scripts.train_project_models")
+    return rep
+
+
+@router.get("/projects/analytics/tender-anchor/{code}")
+def project_tender_anchor(code: str, db: Session = Depends(get_db)):
+    """招标锚点（真实公告口径：计划投资/标段预算/工期/资金来源/公告链接）。"""
+    try:
+        return pj.tender_anchor(db, code)
+    except ValueError as exc:
+        raise HTTPException(404, str(exc)) from exc
+
+
+@router.get("/projects/analytics/cost-structure/{code}")
+def project_cost_structure(code: str, db: Session = Depends(get_db)):
+    """项目成本构成：实测占比 vs 标定基准容差带 + 预算执行预警。"""
+    if not pj.artifacts_ready():
+        raise HTTPException(409, "项目分析基准缺失：请先执行 python -m scripts.train_project_models")
+    try:
+        return pj.cost_structure(db, code)
+    except ValueError as exc:
+        raise HTTPException(404, str(exc)) from exc
+
+
+class CostForecastIn(BaseModel):
+    section_est_total_yuan: float = Field(..., gt=0, description="标段预算合计（元）")
+    duration_days: int = 0
+
+
+@router.post("/projects/analytics/cost-forecast")
+def project_cost_forecast(body: CostForecastIn):
+    """按标段预算推五类成本与总额区间（标定基准法，非 ML 预测）。"""
+    if not pj.artifacts_ready():
+        raise HTTPException(409, "项目分析基准缺失：请先执行 python -m scripts.train_project_models")
+    try:
+        return pj.cost_forecast(body.section_est_total_yuan, body.duration_days)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+
+
+class TaskDelayRiskIn(BaseModel):
+    process: str = ""
+    plan_days: float = 0
+    workload: float = 0
+    cycle: int = 0
+    device_cnt: int = 0
+
+
+@router.post("/projects/analytics/task-delay-risk")
+def project_task_delay_risk(body: TaskDelayRiskIn):
+    """工序交期风险：历史偏差分位数缓冲建议（含"为何不用 ML"的说明）。"""
+    if not pj.artifacts_ready():
+        raise HTTPException(409, "项目分析基准缺失：请先执行 python -m scripts.train_project_models")
+    return pj.task_delay_risk(body.process, body.plan_days, body.workload, body.cycle, body.device_cnt)

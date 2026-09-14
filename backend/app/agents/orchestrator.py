@@ -15,6 +15,7 @@ from sqlalchemy.orm import Session
 from backend.app.agents.base import AgentArtifact
 from backend.app.agents.dispatch import dispatch_agent
 from backend.app.agents.maintenance import maintenance_agent
+from backend.app.agents.project import handle as project_handle, is_project_question
 from backend.app.agents.solution import solution_agent
 from backend.app.models import ChatSession, Device, KnowledgeEntry, Project, Warning
 from backend.app.services import rag
@@ -99,6 +100,9 @@ def classify_intent(user_text: str) -> str:
         return "dispatch"
     if _has(user_text, MAINTENANCE_WORDS):
         return "maintenance"
+    if is_project_question(user_text):
+        # 项目运营类（标段预算/中标/成本构成/项目编号）优先于方案生成，避免"招标人是谁"被当作方案需求
+        return "project"
     if _has(user_text, SOLUTION_WORDS):
         return "solution"
     if _has(user_text, STATUS_WORDS):
@@ -233,6 +237,8 @@ class Orchestrator:
             return out(dispatch_agent.handle(db, user_text))
         if intent == "maintenance":
             return out(maintenance_agent.handle(db, user_text))
+        if intent == "project":
+            return out(project_handle(db, user_text))
         # 待续任务（缺参阻塞后）仅在“本次消息确实是补充”时续跑，避免劫持无关提问
         supplement_words = ("继续", "生成方案", "开始生成", "可以了", "补全", "接着")
         is_supplement = slots_changed or _has(user_text, supplement_words)

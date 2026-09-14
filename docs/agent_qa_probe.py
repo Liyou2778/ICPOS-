@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 # Agent 问答验收探针：向正在运行的服务连续提问，覆盖全部意图路由。
 # 断言以「结构化字段（agent / need_more / transfer）+ 关键要点」为准，
 # 兼容两种模式：离线演示（确定性模板）与真实大模型（自然行文，可能改写措辞）。
@@ -13,34 +12,144 @@ BASE = sys.argv[1] if len(sys.argv) > 1 else "http://127.0.0.1:8000"
 
 # name, 问题, 期望 agent, 期望 need_more, 期望 transfer(None=不校验), 关键要点(命中任一即可), 是否新建会话
 BATTERY = [
-    ("方案生成·完整需求", "我是矿山生产主管，年产200万吨矿石，工期3年，预算1.5亿元，帮我生成矿山施工方案并推荐设备",
-     "solution", False, False, ["方案", "选型"], False),
-    ("方案生成·参数缺失(阻塞追问)", "帮我做个矿山施工方案，年产200万吨",
-     "requirement", True, False, ["预算", "补录", "缺"], True),  # 独立会话，验证"无历史槽位时阻塞"
-    ("施工调度", "矿山运输设备空载率高，帮我调度派车",
-     "dispatch", False, False, ["派单", "空载"], False),
-    ("施工调度·故障重调度", "T02 故障了，立即重新调度",
-     "dispatch", False, False, ["T02", "重调度", "故障"], False),
-    ("运维·自然语言诊断", "矿卡液压油温高、动作没劲，怀疑漏油，帮我诊断",
-     "maintenance", False, False, ["HYD", "液压", "诊断"], False),
-    ("运维·故障码查询", "HYD-01 是什么意思？怎么修？",
-     "maintenance", False, False, ["HYD-01", "液压油温过高", "维修"], False),
-    ("运维·生成维修工单", "给矿卡 T02 生成一张维修工单",
-     "maintenance", False, False, ["WO-", "工单"], False),
-    ("运维·预测性维护", "预测一下设备 T04 会不会出问题",
-     "maintenance", False, False, ["T04", "风险", "HYD"], False),
-    ("运营状态查询", "现在矿上有哪些设备在干活？今天产量和进度怎么样？",
-     "status", False, False, ["设备", "进度"], False),
-    ("知识库问答(RAG)·爆破单耗", "露天矿爆破的单耗一般取多少？怎么降低大块率？",
-     "kb_qa", False, False, ["单耗", "爆破"], False),
-    ("知识库问答(RAG)·安全车挡", "排土场的安全车挡高度有什么要求？",
-     "kb_qa", False, False, ["安全车挡", "排土"], False),
-    ("转人工", "这个问题太复杂了，帮我转人工客服",
-     "human", False, True, ["人工"], False),
-    ("多轮追问(验证上下文)", "把上面那套施工方案里的第二套选型方案的三年TCO报给我",
-     None, False, False, ["TCO", "元", "方案"], False),  # agent 允许 solution / solution_followup
-    ("防幻觉·知识库外问题", "帮我算一下这台挖掘机的量子纠缠场强是多少？",
-     "kb_qa", False, None, ["人工", "核实", "参考", "不编造", "对应"], False),  # 拒答或最接近参考+转人工均可
+    (
+        "方案生成·完整需求",
+        "我是矿山生产主管，年产200万吨矿石，工期3年，预算1.5亿元，帮我生成矿山施工方案并推荐设备",
+        "solution",
+        False,
+        False,
+        ["方案", "选型"],
+        False,
+    ),
+    (
+        "方案生成·参数缺失(阻塞追问)",
+        "帮我做个矿山施工方案，年产200万吨",
+        "requirement",
+        True,
+        False,
+        ["预算", "补录", "缺"],
+        True,
+    ),  # 独立会话，验证"无历史槽位时阻塞"
+    ("施工调度", "矿山运输设备空载率高，帮我调度派车", "dispatch", False, False, ["派单", "空载"], False),
+    (
+        "施工调度·故障重调度",
+        "T02 故障了，立即重新调度",
+        "dispatch",
+        False,
+        False,
+        ["T02", "重调度", "故障"],
+        False,
+    ),
+    (
+        "运维·自然语言诊断",
+        "矿卡液压油温高、动作没劲，怀疑漏油，帮我诊断",
+        "maintenance",
+        False,
+        False,
+        ["HYD", "液压", "诊断"],
+        False,
+    ),
+    (
+        "运维·故障码查询",
+        "HYD-01 是什么意思？怎么修？",
+        "maintenance",
+        False,
+        False,
+        ["HYD-01", "液压油温过高", "维修"],
+        False,
+    ),
+    ("运维·生成维修工单", "给矿卡 T02 生成一张维修工单", "maintenance", False, False, ["WO-", "工单"], False),
+    (
+        "运维·预测性维护",
+        "预测一下设备 T04 会不会出问题",
+        "maintenance",
+        False,
+        False,
+        ["T04", "风险", "HYD"],
+        False,
+    ),
+    (
+        "运营状态查询",
+        "现在矿上有哪些设备在干活？今天产量和进度怎么样？",
+        "status",
+        False,
+        False,
+        ["设备", "进度"],
+        False,
+    ),
+    (
+        "项目运营·组合看板",
+        "项目库里现在有哪些项目？标段预算合计大概多少？",
+        "project",
+        False,
+        False,
+        ["项目", "预算"],
+        False,
+    ),
+    (
+        "项目运营·招标锚点查询",
+        "K1500002026072301 这个项目的招标人和计划总投资是多少？",
+        "project",
+        False,
+        False,
+        ["招标人", "投资"],
+        False,
+    ),
+    (
+        "项目运营·成本构成与预算执行",
+        "B1506002026080702 的成本构成合理吗？预算执行情况怎么样？",
+        "project",
+        False,
+        False,
+        ["成本", "预算执行"],
+        False,
+    ),
+    (
+        "项目运营·按预算测算成本",
+        "按 5000 万元标段预算帮我测算一下五类成本构成",
+        "project",
+        False,
+        False,
+        ["万元", "成本"],
+        False,
+    ),
+    (
+        "知识库问答(RAG)·爆破单耗",
+        "露天矿爆破的单耗一般取多少？怎么降低大块率？",
+        "kb_qa",
+        False,
+        False,
+        ["单耗", "爆破"],
+        False,
+    ),
+    (
+        "知识库问答(RAG)·安全车挡",
+        "排土场的安全车挡高度有什么要求？",
+        "kb_qa",
+        False,
+        False,
+        ["安全车挡", "排土"],
+        False,
+    ),
+    ("转人工", "这个问题太复杂了，帮我转人工客服", "human", False, True, ["人工"], False),
+    (
+        "多轮追问(验证上下文)",
+        "把上面那套施工方案里的第二套选型方案的三年TCO报给我",
+        None,
+        False,
+        False,
+        ["TCO", "元", "方案"],
+        False,
+    ),  # agent 允许 solution / solution_followup
+    (
+        "防幻觉·知识库外问题",
+        "帮我算一下这台挖掘机的量子纠缠场强是多少？",
+        "kb_qa",
+        False,
+        None,
+        ["人工", "核实", "参考", "不编造", "对应"],
+        False,
+    ),  # 拒答或最接近参考+转人工均可
 ]
 
 
@@ -48,7 +157,10 @@ def main() -> int:
     c = httpx.Client(base_url=BASE, timeout=90)
     main_sid = c.post("/api/chat/sessions", json={"title": "Agent问答验收"}).json()["session_id"]
     sid = main_sid
-    print(f"主会话 session_id = {main_sid}（多轮/上下文类用例都在此会话；标注项使用独立会话后切回）\n" + "-" * 78)
+    print(
+        f"主会话 session_id = {main_sid}（多轮/上下文类用例都在此会话；标注项使用独立会话后切回）\n"
+        + "-" * 78
+    )
     passed = 0
     for idx, (name, q, agent, need_more, transfer, keys, fresh) in enumerate(BATTERY, 1):
         if fresh:
@@ -70,11 +182,15 @@ def main() -> int:
         key_ok = (not keys) or any(k in content for k in keys)
         ok = agent_ok and need_ok and transfer_ok and key_ok and len(content) > 0
         passed += int(ok)
-        print(f"[{idx:02d}] {'✅' if ok else '❌'} {name}  (路由→{got_agent}, need_more={got_need}, transfer={got_transfer})")
+        print(
+            f"[{idx:02d}] {'✅' if ok else '❌'} {name}  (路由→{got_agent}, need_more={got_need}, transfer={got_transfer})"
+        )
         print(f"     问: {q}")
         print(f"     答: {content.replace(chr(10), ' ')[:150]}…")
         if not ok:
-            print(f"     判定: agent_ok={agent_ok} need_ok={need_ok} transfer_ok={transfer_ok} key_ok={key_ok}")
+            print(
+                f"     判定: agent_ok={agent_ok} need_ok={need_ok} transfer_ok={transfer_ok} key_ok={key_ok}"
+            )
         print("-" * 78)
     print(f"结果：{passed}/{len(BATTERY)} 项通过")
     return 0 if passed == len(BATTERY) else 1

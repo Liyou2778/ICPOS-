@@ -11,6 +11,7 @@ import type {
   FrontendConfig,
   HealthInfo,
   OperationsData,
+  ProjectRow,
   SlotField,
   SolutionPlan,
   TrendPoint,
@@ -95,6 +96,17 @@ export const api = {
   predictCorpus: (deviceId: string, at?: string) =>
     http.get<CorpusPrediction>(
       `/maintenance/predict-corpus/${encodeURIComponent(deviceId)}${at ? `?at=${encodeURIComponent(at)}` : ''}`),
+
+  // ---------- 项目运营分析（招标锚点 / 成本构成 / 预算执行） ----------
+  projectSummary: () => http.get<Record<string, any>>('/projects/analytics/summary'),
+  projectList: () => http.get<{ projects: ProjectRow[]; ready: boolean }>('/projects/analytics/projects'),
+  projectReport: () => http.get<Record<string, any>>('/projects/analytics/model-report'),
+  projectAnchor: (code: string) => http.get<Record<string, any>>(`/projects/analytics/tender-anchor/${code}`),
+  projectCostStructure: (code: string) => http.get<Record<string, any>>(`/projects/analytics/cost-structure/${code}`),
+  projectCostForecast: (sectionEstYuan: number, durationDays = 0) =>
+    http.post<Record<string, any>>('/projects/analytics/cost-forecast', { section_est_total_yuan: sectionEstYuan, duration_days: durationDays }),
+  projectDelayRisk: (body: { process?: string; plan_days?: number; workload?: number; cycle?: number; device_cnt?: number }) =>
+    http.post<Record<string, any>>('/projects/analytics/task-delay-risk', body),
 
   // ---------- 前端运行时配置（地图双模式） ----------
   frontendConfig: () => http.get<FrontendConfig>('/config/frontend'),

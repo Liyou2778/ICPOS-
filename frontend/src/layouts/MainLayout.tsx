@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Layout, Menu, Tag, Typography, theme } from 'antd';
 import {
   DashboardOutlined, EnvironmentOutlined, FileTextOutlined, MessageOutlined,
-  ToolOutlined, LogoutOutlined, RocketOutlined,
+  ProjectOutlined, ToolOutlined, LogoutOutlined, RocketOutlined,
 } from '@ant-design/icons';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../store/auth';
@@ -15,6 +15,7 @@ const MENU = [
   { key: '/workspace', icon: <FileTextOutlined />, label: '方案工作台' },
   { key: '/map', icon: <EnvironmentOutlined />, label: '设备地图监控' },
   { key: '/maintenance', icon: <ToolOutlined />, label: '智能运维中心' },
+  { key: '/projects', icon: <ProjectOutlined />, label: '项目运营分析' },
   { key: '/chat', icon: <MessageOutlined />, label: '智能对话' },
 ];
 

@@ -21,6 +21,7 @@ def main() -> int:
         print(f"  维保知识库故障码/保养定额：{stats['fault_codes']}")
         print(f"  施工工艺库分块：{stats['process_chunks']}")
         print(f"  方案模板库分块：{stats['template_chunks']}")
+        print(f"  项目运营库分块：{stats['project_chunks']}")
         print(f"  向量库条目总数：{stats['vector_entries']}")
         return 0
     finally:

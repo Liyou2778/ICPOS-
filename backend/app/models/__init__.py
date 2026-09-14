@@ -5,7 +5,7 @@ from backend.app.models.device import Device, EquipmentModel, SparePart
 from backend.app.models.dispatch import DispatchLog, DispatchOrder, DispatchPlan
 from backend.app.models.knowledge import KnowledgeEntry, SolutionDocument
 from backend.app.models.maintenance import FaultCode, MaintenancePlan, Warning, WorkOrder, WorkOrderEvent
-from backend.app.models.project import Project, Task, TaskProgress
+from backend.app.models.project import Project, ProjectCost, Task, TaskProgress
 from backend.app.models.system import ChatMessage, ChatSession, DailyCost, LLMCallLog, User
 
 __all__ = [
@@ -24,6 +24,7 @@ __all__ = [
     "LLMCallLog",
     "MaintenancePlan",
     "Project",
+    "ProjectCost",
     "SolutionDocument",
     "SparePart",
     "Task",
