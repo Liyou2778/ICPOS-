@@ -121,6 +121,8 @@ npm run build                   # 产物 frontend/dist，单源托管由后端�
 ## 📖 文档
 
 - [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md) —— 开发/验收手册（环境、命令、接口、限制口径）
+- [`docs/validation/`](docs/validation/agent_real_case_validation.md) —— **真实企业案例验证报告**
+  （4 个可溯源案例的"需求 → 结果"对照、发现的 4 个缺陷与修复、Agent 可靠性结论与不足）
 - [`docs/deliverables/`](docs/deliverables/) —— 参赛交付物：五幕演示脚本、系统架构、指标质证口径、
   交付包核对清单、答辩预设质询、**[项目运营分析方法与数据边界](docs/deliverables/05_项目运营分析方法与数据边界.md)**、
   **[视觉定位能力可行性与规划（未实现）](docs/deliverables/06_视觉定位能力可行性与规划.md)**
@@ -130,7 +132,7 @@ npm run build                   # 产物 frontend/dist，单源托管由后端�
 
 | 项目 | 结果 | 复现命令 |
 |---|---|---|
-| 后端验收用例（pytest，含五幕剧情 + 项目语料/模型/接口） | ✅ 57 passed | `.venv\Scripts\python.exe -m pytest -q` |
+| 后端验收用例（pytest，含五幕剧情 + 项目语料/模型/接口 + 真实案例验证回归） | ✅ 68 passed | `.venv\Scripts\python.exe -m pytest -q` |
 | 后端代码质量 | ✅ ruff check / format 通过 | `uv run ruff check backend scripts docs` |
 | 前端 | ✅ typecheck + eslint + build 通过 | `cd frontend && npm run lint && npm run build` |
 | 端到端（SPA+16 项接口/SSE/WS） | ✅ 全部通过 | `python docs/e2e_final.py` |
@@ -146,6 +148,12 @@ npm run build                   # 产物 frontend/dist，单源托管由后端�
 | 项目运营语料 ETL | ✅ 22 项目（train 11 / test 11，零交叉）/ 340 任务 / 385 台账（57,069.5 万元）；重跑零新增且状态指纹一致 | `scripts/ingest_project_corpus --strict` |
 | 项目工期/成本模型（**诚实结论：未过上线门控**） | ⚠️ 测试 MAE 2.248 天 > 基线 1.127 天、R² -0.488；成本 LOPO MAPE 23.9% > 基线 14.7% → **不上线 ML**，生产改用标定基准 | `data/models/project/eval_report.json` |
 | 项目运营分析（生产方案） | ✅ 工期缓冲 P80 1 天 / P90 3 天；成本结构容差带 P25~P75；预算执行 P75 1.105 预警、P90 1.175 严重 | `/api/projects/analytics/summary` |
+| **真实企业案例验证**（4 个可溯源案例：国家电投白音华 ×2、平煤神马、国家能源集团） | ✅ 解析 4/4、配置 2/2、阻塞/放行 4/4、规模诚实性 2/2；**并借此发现并修复 4 个缺陷**（吨级误判为工程量、总工程量当成年产量、识别不到"最高限价"、超规模静默给巨型配置） | `scripts/validate_agent_with_real_cases` + [`docs/validation/`](docs/validation/agent_real_case_validation.md) |
+
+> ⚠️ **真实案例验证暴露的边界（已写入文档，不得回避）**：参数库单价为示例数据，与真实成交价（75 吨级纯电矿卡
+> 130~136 万元/台）相差约 **3 倍**；参数库规模仅覆盖中小型露天矿（最大 6 m³ 挖掘机 / 130 t 矿卡），
+> 对 4.6 亿吨/年特大型矿区**不具备配置能力**（现仅声明超范围）；无人驾驶/纯电装备不在参数库内，无法参与选型计算；
+> 验证集仅 4 个案例，**只能证明"未犯明显错误"，不能证明"普遍准确"**。
 
 > ⚠️ **口径说明**：MVP 按"模拟先行"策略以仿真数据验证（指导书 5.2 / PRD §4.2 范围外）；
 > 真实设备 IoT 接入与模型迁移列入 V1.1 试点；生成内容均附"需人工确认"标注。

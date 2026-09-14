@@ -55,18 +55,30 @@ def parse_requirement(text: str) -> ParsedRequirement:
             break
 
     # 2) 年产量/工程量（吨/方/万/亿 单位折算）
+    #    注意 1：`吨级/方级` 是设备规格（如"75 吨级矿卡"），不是工程量，必须排除——
+    #            该缺陷由真实案例验证发现（平煤神马"20 台 75 吨级纯电矿卡"曾被误解析为年产 75 吨）。
+    #    注意 2：`总工程量/工程量` 是**全周期总量**（真实招标公告常用口径），需结合工期折算为年产量，
+    #            否则会把五年总剥离量当成一年产量（白音华案例验证发现）。
+    total_volume_t = 0.0
     m = re.search(
-        r"(?:年产|年产量|产量|年作业量|工程量|总工程量|剥离量|年剥离量)?\s*([\d.]+)\s*(万亿|亿|万)?\s*(吨|t|T|方|立方|m3|m³|立方米)",
+        r"(年产|年产量|产量|年作业量|总工程量|工程量|年剥离量|剥离量|总剥离量|剥离任务量)?\s*([\d.]+)\s*"
+        r"(万亿|亿|万)?\s*(吨|t|T|方|立方|m3|m³|立方米)(?!级)",
         t,
     )
     if m:
-        val = float(m.group(1)) * _num(m.group(2))
-        unit_raw = m.group(3)
+        keyword = m.group(1) or ""
+        val = float(m.group(2)) * _num(m.group(3))
+        unit_raw = m.group(4)
         is_m3 = unit_raw in ("方", "立方", "m3", "m³", "立方米")
         # 方量按矿岩密度折算吨（2.6 t/m3），后续选型统一按吨位计
-        req.annual_t = val * 2.6 if is_m3 else val
+        tons = val * 2.6 if is_m3 else val
+        if any(k in keyword for k in ("总工程量", "工程量", "总剥离量")):
+            total_volume_t = tons  # 全周期总量，待工期限定后折算
+            req.annual_t = tons
+        else:
+            req.annual_t = tons
     # 兼容 "x万吨/年"
-    m2 = re.search(r"([\d.]+)\s*(万|亿)?\s*(吨|方|t|m3|m³)\s*/\s*年", t)
+    m2 = re.search(r"([\d.]+)\s*(万|亿)?\s*(吨|方|t|m3|m³)(?!级)\s*/\s*年", t)
     if m2 and req.annual_t <= 0:
         val = float(m2.group(1)) * _num(m2.group(2))
         req.annual_t = val * 2.6 if m2.group(3) in ("方", "m3", "m³") else val
@@ -80,8 +92,10 @@ def parse_requirement(text: str) -> ParsedRequirement:
     elif req.annual_t > 0 and "年" in t:
         req.duration_years = 1.0
 
-    # 4) 预算
-    m = re.search(r"预算\s*([\d.]+)\s*(亿|万)?\s*元", t)
+    # 4) 预算（兼容采购口径：最高限价/限价/计划投资/总投资/合同额/标的额/中标金额）
+    m = re.search(
+        r"(?:预算|最高限价|限价|计划投资|总投资|合同额|标的额|中标金额)\s*([\d.]+)\s*(亿|万)?\s*元", t
+    )
     if m:
         req.budget_cny = float(m.group(1)) * _num(m.group(2))
 
@@ -95,10 +109,13 @@ def parse_requirement(text: str) -> ParsedRequirement:
         constraints.append("严寒工况")
     req.constraints = constraints
 
-    # 6) 折算
+    # 6) 折算（总量口径：按工期折算年产量；年产量口径：×工期得总量）
+    if total_volume_t > 0 and req.duration_years > 0:
+        req.total_t = total_volume_t
+        req.annual_t = total_volume_t / req.duration_years
     if req.annual_t > 0:
         req.daily_t = req.annual_t / 330.0
-    if req.annual_t > 0 and req.duration_years > 0:
+    if req.annual_t > 0 and req.duration_years > 0 and req.total_t <= 0:
         req.total_t = req.annual_t * req.duration_years
 
     # 7) 缺失参数 -> 追问

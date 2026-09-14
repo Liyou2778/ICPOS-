@@ -158,6 +158,7 @@ class SolutionAgent(BaseAgent):
             "requirement": parsed.model_dump(),
             "bundles": bundles,
             "best_index": result.best_index,
+            "assumptions": result.assumptions,
             "meta": {
                 "model_version": "demo-template" if not settings.has_real_llm else settings.llm_model,
                 "kb_version": "V1.0",
@@ -191,6 +192,9 @@ class SolutionAgent(BaseAgent):
             "设备参数、价格与 TCO 全部来自设备参数库直读（示例参数，需人工确认后报价）",
             f"方案文档已按模板装配完成（{payload['title']}），可一键导出 Word/PDF",
         ]
+        oversize_note = next((a for a in result.assumptions if a.startswith("⚠️")), "")
+        if oversize_note:
+            facts.insert(1, oversize_note)  # 超范围声明必须出现在答复显眼位置
         return self.artifact(
             facts=facts, payload=payload, citations=citations, message=f"方案生成完成：{payload['title']}"
         )

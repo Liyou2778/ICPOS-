@@ -1,0 +1,428 @@
+{
+  "generated_at": "2026-09-14T12:40:19.367707+00:00",
+  "dataset": "ICoPS Agent 真实企业案例验证集",
+  "constants": {
+    "density_t_per_m3": 2.6,
+    "work_days_year": 330,
+    "work_hours_day": 20.0,
+    "tco_years": 3,
+    "truck_excavator_band": [
+      3.0,
+      8.0
+    ]
+  },
+  "summary": {
+    "cases": 4,
+    "parse_pass": 4,
+    "config_applicable": 2,
+    "config_pass": 2,
+    "blocking_pass": 4,
+    "scale_honesty_applicable": 2,
+    "scale_honesty_pass": 2,
+    "out_of_scope_cases": [
+      "baiyinhua_stripping_2026_2030"
+    ]
+  },
+  "results": [
+    {
+      "id": "baiyinhua_unmanned_stripping_2025",
+      "title": "国家电投内蒙古公司白音华露天矿无人驾驶剥离（2025 年度）",
+      "source_tier": "official_media",
+      "source_url": "https://www.cpnn.com.cn/qiye/jishu2023/202511/t20251119_1847600.html",
+      "parse": {
+        "parsed": {
+          "scene_type": "mining",
+          "annual_t": 20956000.0,
+          "annual_m3": 8060000.0,
+          "duration_years": 1.0,
+          "budget_cny": 0.0,
+          "constraints": [],
+          "missing": [
+            "budget"
+          ]
+        },
+        "checks": [
+          {
+            "item": "年工程量解析",
+            "expected": 20956000,
+            "got": 20956000.0,
+            "rel_dev": 0.0,
+            "pass": true
+          },
+          {
+            "item": "工期解析",
+            "expected": 1.0,
+            "got": 1.0,
+            "rel_dev": 0.0,
+            "pass": true
+          },
+          {
+            "item": "约束识别（记录项，不判失败）",
+            "expected": [
+              "无人驾驶",
+              "连续作业"
+            ],
+            "got": [],
+            "matched": [],
+            "pass": true
+          }
+        ],
+        "pass": true
+      },
+      "configuration": {
+        "required_daily_t": 63503.0,
+        "best_bundle": {
+          "name": "经济适配型",
+          "fleet": [
+            {
+              "model": "70吨级矿山型液压挖掘机",
+              "count": 3,
+              "unit_price_cny": 4300000.0,
+              "total_price_cny": 12900000.0
+            },
+            {
+              "model": "90吨级非公路自卸车",
+              "count": 19,
+              "unit_price_cny": 4700000.0,
+              "total_price_cny": 89300000.0
+            }
+          ],
+          "daily_capacity_t": 72426.6,
+          "utilization_est": 0.877,
+          "fleet_total_cny": 102200000.0,
+          "tco_3y_total_cny": 212150720.0,
+          "coverage_ratio": 1.141,
+          "note": "车铲斗容匹配、装车时间 3~5 分钟；方案数值均由设备参数库直读计算（示例参数，需人工确认后报价）"
+        },
+        "assumptions": [
+          "年作业 330 天 × 日作业 20 小时；矿岩密度 2.6 t/m3",
+          "运距按 2.8 km 测算；TCO 周期 3 年",
+          "设备参数为公开渠道示例数据，正式方案需厂商确认"
+        ],
+        "checks": [
+          {
+            "item": "机型全部来自参数库（防幻觉）",
+            "unknown_models": [],
+            "pass": true
+          },
+          {
+            "item": "购置总额可复算（单价×台数）",
+            "reported": 102200000.0,
+            "recomputed": 102200000.0,
+            "pass": true
+          },
+          {
+            "item": "车铲比落在行业区间 3.0~8.0",
+            "got": 6.33,
+            "pass": true
+          },
+          {
+            "item": "单车日产能 vs 真实案例锚点（±50% 容差）",
+            "model_value_t": 3828.2,
+            "real_band_t": [
+              1568,
+              3835
+            ],
+            "ratio_to_band_mid": 1.417,
+            "pass": true
+          }
+        ],
+        "truck_to_excavator_ratio": 6.33,
+        "per_truck_daily_t": 3828.2
+      },
+      "scale_honesty": {
+        "out_of_scope": false,
+        "recommended_fleet": {
+          "excavator": 3,
+          "truck": 19
+        },
+        "limits": {
+          "excavator": 10,
+          "truck": 50
+        },
+        "declared_limit_in_output": false,
+        "pass": true,
+        "note": "规模超限时必须在输出中显式声明适用范围；未声明则记为待改进项（不掩饰）"
+      },
+      "blocking": {
+        "agent": "requirement",
+        "params_complete": false,
+        "expected_behaviour": "阻塞并追问",
+        "actual_blocked": true,
+        "pass": true,
+        "note": "参数不全却硬做方案、或参数齐备却反复追问，都属异常行为"
+      },
+      "price_reference": {
+        "applicable": false,
+        "note": "口径A=按报道日均剥离量 5.9 万 m³ ÷ 40 台（1475 m³/台·日）；口径B=按年计划量 806 万 m³ ÷ 40 台 ÷ 11 个月 334 天（603 m³/台·日）。两口径差异来自报道内部口径（日均量可能为全矿剥离口径或含混编阶段），故取区间 [603, 1475] m³/台·日 作为基准，不作单点结论。"
+      },
+      "configuration_checks_pass": true
+    },
+    {
+      "id": "baiyinhua_stripping_2026_2030",
+      "title": "国家电投白音华矿区四大剥离工程（2026—2030，5 年）",
+      "source_tier": "industry_media + secondary",
+      "source_url": "http://www.wrdrive.com/mobile/news/show.php?itemid=7390",
+      "parse": {
+        "parsed": {
+          "scene_type": "mining",
+          "annual_t": 461760000.0000001,
+          "annual_m3": 177600000.0,
+          "duration_years": 5.0,
+          "budget_cny": 7800000000.0,
+          "constraints": [],
+          "missing": []
+        },
+        "checks": [
+          {
+            "item": "年工程量解析",
+            "expected": 461760000,
+            "got": 461760000.0000001,
+            "rel_dev": 0.0,
+            "pass": true
+          },
+          {
+            "item": "工期解析",
+            "expected": 5.0,
+            "got": 5.0,
+            "rel_dev": 0.0,
+            "pass": true
+          },
+          {
+            "item": "预算解析",
+            "expected": 7800000000,
+            "got": 7800000000.0,
+            "rel_dev": 0.0,
+            "pass": true
+          },
+          {
+            "item": "约束识别（记录项，不判失败）",
+            "expected": [
+              "无人驾驶设备不低于 240 台",
+              "剥离工程"
+            ],
+            "got": [],
+            "matched": [],
+            "pass": true
+          }
+        ],
+        "pass": true
+      },
+      "configuration": {
+        "required_daily_t": 1399272.7,
+        "best_bundle": {
+          "name": "经济适配型",
+          "fleet": [
+            {
+              "model": "70吨级矿山型液压挖掘机",
+              "count": 58,
+              "unit_price_cny": 4300000.0,
+              "total_price_cny": 249400000.0
+            },
+            {
+              "model": "90吨级非公路自卸车",
+              "count": 366,
+              "unit_price_cny": 4700000.0,
+              "total_price_cny": 1720200000.0
+            }
+          ],
+          "daily_capacity_t": 1400247.2,
+          "utilization_est": 0.999,
+          "fleet_total_cny": 1969600000.0,
+          "tco_3y_total_cny": 4088650240.0,
+          "coverage_ratio": 1.001,
+          "note": "车铲斗容匹配、装车时间 3~5 分钟；方案数值均由设备参数库直读计算（示例参数，需人工确认后报价）；⚠️ 该需求规模超出本参数库的单项目建议配置上限（挖掘机 ≤10 台、矿车 ≤50 台），本次测算得出 挖掘机×58 + 矿车×366，已超出适用范围：建议拆分标段/分期配置，或改用更大吨位机型与专业选型软件复核，本结果不得直接用于报价。；在预算范围内"
+        },
+        "assumptions": [
+          "年作业 330 天 × 日作业 20 小时；矿岩密度 2.6 t/m3",
+          "运距按 2.8 km 测算；TCO 周期 3 年",
+          "设备参数为公开渠道示例数据，正式方案需厂商确认",
+          "⚠️ 适用范围声明：需求规模超出参数库单项目建议配置上限（挖掘机 ≤10 台、矿车 ≤50 台），3/3 套方案属超范围测算，仅作数学推演，不得直接用于报价；建议拆分标段或改用更大吨位机型复核。"
+        ],
+        "checks": [
+          {
+            "item": "机型全部来自参数库（防幻觉）",
+            "unknown_models": [],
+            "pass": true
+          },
+          {
+            "item": "购置总额可复算（单价×台数）",
+            "reported": 1969600000.0,
+            "recomputed": 1969600000.0,
+            "pass": true
+          },
+          {
+            "item": "车铲比落在行业区间 3.0~8.0",
+            "got": 6.31,
+            "pass": true
+          }
+        ],
+        "truck_to_excavator_ratio": 6.31
+      },
+      "scale_honesty": {
+        "out_of_scope": true,
+        "recommended_fleet": {
+          "excavator": 58,
+          "truck": 366
+        },
+        "limits": {
+          "excavator": 10,
+          "truck": 50
+        },
+        "declared_limit_in_output": true,
+        "pass": true,
+        "note": "规模超限时必须在输出中显式声明适用范围；未声明则记为待改进项（不掩饰）"
+      },
+      "blocking": {
+        "agent": "solution",
+        "params_complete": true,
+        "expected_behaviour": "直接生成方案",
+        "actual_blocked": false,
+        "pass": true,
+        "note": "参数不全却硬做方案、或参数齐备却反复追问，都属异常行为"
+      },
+      "price_reference": {
+        "applicable": false,
+        "note": "78 亿元为**工程承包总额**（含人工、燃油、管理、税费、利润），与设备 TCO 口径不可直接比较，仅作量级参照。"
+      },
+      "configuration_checks_pass": true
+    },
+    {
+      "id": "pingmeishenma_ev_truck_2026",
+      "title": "平煤神马建工集团非公路纯电动矿用自卸车采购（ZPZB-26Z147）",
+      "source_tier": "official_tender",
+      "source_url": "http://zcpt.zgpmsm.com.cn/jyxx/001003/001003001/20260622/c769ee1ed5e249be9c70f013f636c83c.html",
+      "parse": {
+        "parsed": {
+          "scene_type": "mining",
+          "annual_t": 0.0,
+          "annual_m3": 0.0,
+          "duration_years": 0.0,
+          "budget_cny": 28000000.0,
+          "constraints": [
+            "电动化优先"
+          ],
+          "missing": [
+            "annual",
+            "duration"
+          ]
+        },
+        "checks": [
+          {
+            "item": "预算解析",
+            "expected": 28000000,
+            "got": 28000000.0,
+            "rel_dev": 0.0,
+            "pass": true
+          },
+          {
+            "item": "约束识别（记录项，不判失败）",
+            "expected": [
+              "纯电动",
+              "75 吨级",
+              "交货期 30 天"
+            ],
+            "got": [
+              "电动化优先"
+            ],
+            "matched": [],
+            "pass": true
+          }
+        ],
+        "pass": true
+      },
+      "configuration": {
+        "applicable": false,
+        "checks": [],
+        "note": "该真实案例为设备采购类（公告未披露年工程量），无法做产能配置校验；仅做需求解析、阻塞追问与单价对照。"
+      },
+      "scale_honesty": {
+        "out_of_scope": false,
+        "applicable": false,
+        "pass": null,
+        "declared_limit_in_output": false,
+        "note": "该案例无工程量，规模适用性判定不适用"
+      },
+      "blocking": {
+        "agent": "requirement",
+        "params_complete": false,
+        "expected_behaviour": "阻塞并追问",
+        "actual_blocked": true,
+        "pass": true,
+        "note": "参数不全却硬做方案、或参数齐备却反复追问，都属异常行为"
+      },
+      "price_reference": {
+        "applicable": true,
+        "catalog_model": "80吨级非公路自卸车",
+        "catalog_rated_load_t": 80.0,
+        "catalog_unit_price_cny": 4000000.0,
+        "real_unit_price_cny_range": [
+          1300000,
+          1400000
+        ],
+        "ratio_catalog_over_real": 2.963,
+        "pass": null,
+        "note": "品类不同（柴油刚性矿卡 vs 纯电宽体）+ 参数库标注'示例数据'，故不做通过/失败判定，仅作为参数库单价需用真实采购数据校准的证据。"
+      },
+      "configuration_checks_pass": null
+    },
+    {
+      "id": "chnenergy_excavator_batch_2026",
+      "title": "国家能源集团 2025 年第三批煤炭设备（液压挖掘机）集中采购（CEZB250209959001）",
+      "source_tier": "official_tender",
+      "source_url": "http://www.chnenergybidding.com.cn/bidweb/001/001005/001005001/20260113/32f943f9-a45a-413b-a9a5-210b1e1c7ce6.html",
+      "parse": {
+        "parsed": {
+          "scene_type": "mining",
+          "annual_t": 0.0,
+          "annual_m3": 0.0,
+          "duration_years": 0.0,
+          "budget_cny": 18000000.0,
+          "constraints": [],
+          "missing": [
+            "annual",
+            "duration"
+          ]
+        },
+        "checks": [
+          {
+            "item": "约束识别（记录项，不判失败）",
+            "expected": [
+              "集中采购",
+              "露天煤矿"
+            ],
+            "got": [],
+            "matched": [],
+            "pass": true
+          }
+        ],
+        "pass": true
+      },
+      "configuration": {
+        "applicable": false,
+        "checks": [],
+        "note": "该真实案例为设备采购类（公告未披露年工程量），无法做产能配置校验；仅做需求解析、阻塞追问与单价对照。"
+      },
+      "scale_honesty": {
+        "out_of_scope": false,
+        "applicable": false,
+        "pass": null,
+        "declared_limit_in_output": false,
+        "note": "该案例无工程量，规模适用性判定不适用"
+      },
+      "blocking": {
+        "agent": "requirement",
+        "params_complete": false,
+        "expected_behaviour": "阻塞并追问",
+        "actual_blocked": true,
+        "pass": true,
+        "note": "参数不全却硬做方案、或参数齐备却反复追问，都属异常行为"
+      },
+      "price_reference": {
+        "applicable": false,
+        "note": "公示未给型号/数量，无法计算单价；仅可用于两点：① 徐工矿业机械是大型露天矿液压挖掘机的真实在役供应商（品牌与参数库一致）；② 批量集采金额量级（约 1800 万元/批）。"
+      },
+      "configuration_checks_pass": null
+    }
+  ]
+}

@@ -206,8 +206,11 @@ tender-anchor/{code},cost-structure/{code}}`、`POST cost-forecast`、`POST task
 .\.venv\Scripts\python.exe -m uvicorn backend.app.main:app --reload
 # http://127.0.0.1:8000/docs · 演示账号 admin/icops2026（另有 sales、dispatcher、service、mine）
 
-# 验收用例（pytest 57 项：PRD 验收标准 + 五幕剧情链路 + 项目运营语料/模型/接口）
+# 验收用例（pytest 68 项：PRD 验收标准 + 五幕剧情链路 + 项目运营语料/模型/接口 + 真实案例验证回归）
 .\.venv\Scripts\python.exe -m pytest -q
+
+# 真实企业案例验证（4 个可溯源案例；产物 data/validation/agent_validation_report.json）
+.\.venv\Scripts\python.exe -m scripts.validate_agent_with_real_cases
 
 # 端到端冒烟（需服务已启动；默认连 8001，可在脚本内改 BASE）
 .\.venv\Scripts\python.exe docs\smoke_e2e.py
@@ -229,7 +232,7 @@ uv run ruff check backend scripts data/simulator
 uv run ruff format backend scripts data/simulator
 ```
 
-### 57 项 pytest 覆盖（PRD 验收标准 + 五幕剧情链路 + 项目运营语料/模型）
+### 68 项 pytest 覆盖（PRD 验收标准 + 五幕剧情链路 + 项目运营语料/模型 + 真实案例验证）
 
 - `test_selection.py`：需求解析（完整/缺失追问）、≥3 套方案、TCO 四类、数值仅出自参数库、预算约束
 - `test_dispatch.py`：派单可解释原因、重调度排除故障车、确认下发生成派单、A/B 空载率下降 ≥15%
@@ -245,6 +248,9 @@ uv run ruff format backend scripts data/simulator
   **门控自洽**（结论必须由证据严格推导）、标定分位数单调性与容差带合理性
 - `test_project_analytics.py`（项目接口）：契约与错误码、**接口金额与台账逐条一致**、容差带判定逻辑、
   测算区间有序性、工期风险为分布而非预测、项目类问题路由到 project 智能体且数字数据库直读
+- `test_real_case_validation.py`（**真实企业案例验证回归**）：锁定 4 个由真实案例发现的缺陷——
+  "吨级"不得当作工程量、**"总工程量"须按工期折算年产量**、"最高限价/计划投资/合同额"等同义词识别预算、
+  超规模需求必须显式声明适用范围（且正常需求不得出现噪声式免责声明）；另含验证集可溯源性与报告门禁
 
 ### Web 前端（React 18 · TypeScript · Vite · AntD5 · ECharts）
 
@@ -317,3 +323,9 @@ uv run ruff format backend scripts data/simulator
    完整分析、前置验证清单（许可证原文核对/显存与延迟复测/中文召回对照/密集场景稳定性）与
    分阶段计划见 [`docs/deliverables/06_视觉定位能力可行性与规划.md`](deliverables/06_视觉定位能力可行性与规划.md)。
    口径红线：不得表述为"已实现照片识别 / 缺陷检测 / 视觉巡检"。
+9. **选型参数库的能力边界（由真实企业案例验证得出）**：设备单价为公开渠道**示例数据**，
+   与真实成交价存在约 **3 倍**量级差异（75 吨级纯电矿卡真实成交 130~136 万元/台）；
+   参数库规模仅覆盖中小型露天矿（最大 6 m³ 挖掘机 / 130 t 矿卡），对 4.6 亿吨/年特大型矿区
+   **不具备配置能力**（现仅输出超范围声明）；无人驾驶/纯电装备不在参数库内，只能识别为文本约束。
+   单车产能模型（2.8 km 运距 + 20 h/日）相对真实案例偏乐观。
+   完整对照与验证结论见 [`docs/validation/agent_real_case_validation.md`](validation/agent_real_case_validation.md)。

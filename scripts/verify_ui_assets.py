@@ -70,8 +70,10 @@ def main() -> int:
     if target:
         cs = c.get(f"/api/projects/analytics/cost-structure/{target['code']}")
         anchor = c.get(f"/api/projects/analytics/tender-anchor/{target['code']}")
-        print(f"  抽样项目 {target['code']}: 成本构成 {cs.status_code} / 招标锚点 {anchor.status_code} / "
-              f"台账 {cs.json()['total_cost_yuan'] / 1e4:,.2f} 万元")
+        print(
+            f"  抽样项目 {target['code']}: 成本构成 {cs.status_code} / 招标锚点 {anchor.status_code} / "
+            f"台账 {cs.json()['total_cost_yuan'] / 1e4:,.2f} 万元"
+        )
         ok &= cs.status_code == 200 and anchor.status_code == 200
     ok &= c.get("/api/projects/analytics/model-report").status_code == 200
     print("=" * 56)

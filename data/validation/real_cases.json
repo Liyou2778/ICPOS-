@@ -1,0 +1,156 @@
+{
+  "dataset": "ICoPS Agent 真实企业案例验证集",
+  "created_at": "2026-09-14",
+  "purpose": "用真实公开案例的「客户需求 + 最终结果」检验方案智能体生成的配置与报价是否落在真实区间，并暴露不可比口径",
+  "rules": [
+    "只收录可溯源的公开案例：官方招标/中标公示、国家能源局主管媒体报道优先，二手渠道单独标注 source_tier=secondary",
+    "agent_probe_text 是把公告需求改写为客户端问法，**不修改任何数字**；改写文本随案例一并留档以便复核",
+    "口径不可直接比较的项必须写入 comparability 字段，禁止用不可比数字下结论"
+  ],
+  "density_t_per_m3": 2.6,
+  "cases": [
+    {
+      "id": "baiyinhua_unmanned_stripping_2025",
+      "title": "国家电投内蒙古公司白音华露天矿无人驾驶剥离（2025 年度）",
+      "customer": "国家电投内蒙古公司白音华露天矿",
+      "source_name": "中国能源新闻网（中国电力报，国家能源局主管）",
+      "source_url": "https://www.cpnn.com.cn/qiye/jishu2023/202511/t20251119_1847600.html",
+      "source_tier": "official_media",
+      "publish_date": "2025-11-20",
+      "requirement": {
+        "raw": "2025 全年无人驾驶剥离任务，高效达成 806 万立方米年度计划量；采用试验、混编、连续作业全流程",
+        "annual_m3": 8060000,
+        "annual_t": 20956000,
+        "duration_years": 1.0,
+        "budget_cny": null,
+        "constraints": ["无人驾驶", "连续作业"]
+      },
+      "result": {
+        "equipment": [{"name": "无人驾驶矿卡", "qty": 40, "note": "纳入集中管控与动态调度体系"}],
+        "completed_volume_m3": 8060000,
+        "duration_note": "历经 11 个月连续奋战完成年度任务",
+        "daily_avg_m3": 59000,
+        "daily_max_m3": 64000,
+        "work_hours_per_day": 22.5,
+        "availability": 0.95,
+        "tech_notes": ["云端调度 + 5G 毫秒级车-路-端互通", "3 次技术优化（倒车不到位/遥控动力不足/采区轮胎打滑）"],
+        "contract_cny": null
+      },
+      "derived_benchmarks": {
+        "per_truck_annual_m3": 201500,
+        "per_truck_daily_m3_scopeA": 1475,
+        "per_truck_daily_m3_scopeB": 603,
+        "per_truck_daily_t_scopeA": 3835,
+        "per_truck_daily_t_scopeB": 1568,
+        "scope_note": "口径A=按报道日均剥离量 5.9 万 m³ ÷ 40 台（1475 m³/台·日）；口径B=按年计划量 806 万 m³ ÷ 40 台 ÷ 11 个月 334 天（603 m³/台·日）。两口径差异来自报道内部口径（日均量可能为全矿剥离口径或含混编阶段），故取区间 [603, 1475] m³/台·日 作为基准，不作单点结论。"
+      },
+      "agent_probe_text": "我是国家电投白音华露天矿的剥离工程负责人，2025 年全年无人驾驶剥离任务量为 806 万立方米，工期 12 个月，露天煤矿剥离作业，请推荐设备配置与方案",
+      "comparability": "该案例公开了「台数 → 年剥离量 → 日均剥离量 → 日出动率」，是唯一可直接校验'单车产能'的真实锚点；未公开预算/合同额，故不用于报价校验。"
+    },
+    {
+      "id": "baiyinhua_stripping_2026_2030",
+      "title": "国家电投白音华矿区四大剥离工程（2026—2030，5 年）",
+      "customer": "国家电力投资集团有限公司 / 白音华蒙东煤业",
+      "source_name": "中国无人驾驶网（转新战略） / 微信行业号（工程量与 271 台为二手来源）",
+      "source_url": "http://www.wrdrive.com/mobile/news/show.php?itemid=7390",
+      "source_tier": "industry_media + secondary",
+      "publish_date": "2025-12-26",
+      "requirement": {
+        "raw": "白音华蒙东煤业 2026-2030 年剥离工程、白音华露天矿 2026—2030 年剥离工程；4 个标段累计需部署无人驾驶设备不低于 240 台",
+        "annual_m3": 177600000,
+        "annual_t": 461760000,
+        "duration_years": 5.0,
+        "budget_cny": 7800000000,
+        "constraints": ["无人驾驶设备不低于 240 台", "剥离工程"]
+      },
+      "result": {
+        "equipment": [{"name": "无人驾驶矿卡", "qty": 271, "note": "招标要求 ≥240 台，实际落地 271 台（二手来源待复核）"}],
+        "lots": [
+          {"lot": 1, "winner": "湖南楚湘建设工程集团有限公司", "amount_cny": 2310000000},
+          {"lot": 2, "winner": "西乌珠穆沁旗星光运输有限责任公司", "amount_cny": 2390000000},
+          {"lot": 3, "winner": "矿建设集团有限公司", "amount_cny": 1423000000},
+          {"lot": 4, "winner": "江西核工业建设有限公司", "amount_cny": 1683000000}
+        ],
+        "total_volume_m3": 888000000,
+        "contract_cny": 7806000000,
+        "duration_note": "2025-09 招标，2025-12 公示中标候选人，工期 2026—2030"
+      },
+      "derived_benchmarks": {
+        "per_truck_annual_m3": 655000,
+        "contract_per_truck_cny": 28804428,
+        "scope_note": "78 亿元为**工程承包总额**（含人工、燃油、管理、税费、利润），与设备 TCO 口径不可直接比较，仅作量级参照。"
+      },
+      "agent_probe_text": "我们是国家电投白音华矿区剥离工程，工期 5 年（2026—2030 年），总工程量 8.88 亿立方米露天剥离，预算 78 亿元，要求无人驾驶设备不低于 240 台，请生成施工组织方案并推荐设备配置",
+      "comparability": "本案例是**规模上限测试**：年剥离量约 1.78 亿 m³（≈4.6 亿吨/年），远超本项目参数库（最大 6 m³ 挖掘机 / 130 吨矿卡）的设计区间，用于检验 Agent 是否会如实声明'超出适用范围'而不是给出看似合理的配置。"
+    },
+    {
+      "id": "pingmeishenma_ev_truck_2026",
+      "title": "平煤神马建工集团非公路纯电动矿用自卸车采购（ZPZB-26Z147）",
+      "customer": "平煤神马建工集团有限公司（招标人：中国平煤神马控股集团招标采购中心）",
+      "source_name": "中国平煤神马集团电子招标采购平台 / 中国招标投标公共服务平台",
+      "source_url": "http://zcpt.zgpmsm.com.cn/jyxx/001003/001003001/20260622/c769ee1ed5e249be9c70f013f636c83c.html",
+      "source_tier": "official_tender",
+      "publish_date": "2026-06-22",
+      "requirement": {
+        "raw": "A 包：非公路纯电动矿用自卸车，75 吨级，20 台，最高限价 2800 万元；交货期：合同签订生效后 30 天内",
+        "annual_m3": null,
+        "annual_t": null,
+        "duration_years": null,
+        "budget_cny": 28000000,
+        "constraints": ["纯电动", "75 吨级", "交货期 30 天"]
+      },
+      "result": {
+        "equipment": [{"name": "75 吨级非公路纯电动矿用自卸车", "qty": 20}],
+        "bidders": [
+          {"rank": 1, "bidder": "河南跃薪智能机械有限公司", "score": 93.2, "price_cny": 26000000, "delivery": "合同签订生效后 15 天内"},
+          {"rank": 2, "bidder": "陕西通运重工有限公司", "score": 77.01, "price_cny": 27200000, "delivery": "合同签订后 20 日历天"}
+        ],
+        "contract_cny": 26000000,
+        "unit_price_cny": 1300000,
+        "unit_price_max_cny": 1400000
+      },
+      "derived_benchmarks": {
+        "unit_price_cny_range": [1300000, 1400000],
+        "scope_note": "纯电动车与参数库中的柴油刚性矿卡（XDR80 80 吨级）品类不同，单价不可直接比较；仅用于暴露'参数库单价未经真实采购数据校准'这一风险。"
+      },
+      "agent_probe_text": "我是平煤神马建工集团的设备采购负责人，需要采购 20 台 75 吨级非公路纯电动矿用自卸车用于露天矿剥离运输，最高限价 2800 万元，要求合同签订后 30 天内交货，请给出设备选型与采购方案",
+      "comparability": "最有价值的**真实成交价锚点**：130~140 万元/台（75 吨级纯电宽体）。注意与参数库柴油刚性矿卡不同品类。"
+    },
+    {
+      "id": "chnenergy_excavator_batch_2026",
+      "title": "国家能源集团 2025 年第三批煤炭设备（液压挖掘机）集中采购（CEZB250209959001）",
+      "customer": "国家能源集团（下属露天煤矿）",
+      "source_name": "国家能源招标网（国能e招）中标候选人公示",
+      "source_url": "http://www.chnenergybidding.com.cn/bidweb/001/001005/001005001/20260113/32f943f9-a45a-413b-a9a5-210b1e1c7ce6.html",
+      "source_tier": "official_tender",
+      "publish_date": "2026-01-13",
+      "requirement": {
+        "raw": "液压挖掘机集中采购公开招标（批次采购，公示未披露型号与数量明细）",
+        "annual_m3": null,
+        "annual_t": null,
+        "duration_years": null,
+        "budget_cny": null,
+        "constraints": ["集中采购", "露天煤矿"]
+      },
+      "result": {
+        "equipment": [{"name": "液压挖掘机（批量，型号未公示）", "qty": null}],
+        "bidders": [
+          {"rank": 1, "bidder": "雷沃重工集团有限公司", "price_cny": 17990000},
+          {"rank": 2, "bidder": "徐州徐工矿业机械有限公司", "price_cny": 18450000}
+        ],
+        "contract_cny": 17990000,
+        "reference_performance": [
+          "宝日希勒露天煤矿（神华宝日希勒能源有限公司）",
+          "胜利能源（国能北电胜利能源有限公司）",
+          "哈尔乌素露天煤矿",
+          "黑岱沟露天煤矿（神华准格尔能源有限责任公司）"
+        ]
+      },
+      "derived_benchmarks": {
+        "scope_note": "公示未给型号/数量，无法计算单价；仅可用于两点：① 徐工矿业机械是大型露天矿液压挖掘机的真实在役供应商（品牌与参数库一致）；② 批量集采金额量级（约 1800 万元/批）。"
+      },
+      "agent_probe_text": "国家能源集团露天煤矿需要集中采购一批大型液压挖掘机，预算 1800 万元，用于露天矿剥离与采装作业，请推荐机型与配置方案",
+      "comparability": "仅作品牌可信度与量级参照，**不可**用于单价校验（数量未知）。"
+    }
+  ]
+}

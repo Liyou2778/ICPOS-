@@ -24,6 +24,10 @@ ELECTRIC_PRICE_CNY = 0.8  # 元/kWh（电动化约束占位）
 
 OPERATION_YEARS = 3  # TCO 周期（3 年）
 
+# 单项目建议配置上限（超出即声明"超出适用范围"，不静默给出巨型配置）
+SINGLE_PROJECT_MAX_EXC = 10
+SINGLE_PROJECT_MAX_TRUCK = 50
+
 
 def _spec(model: EquipmentModel) -> dict:
     s = dict(model.spec or {})
@@ -222,6 +226,15 @@ def generate_selection(db: Session, req: ParsedRequirement) -> SelectionResult:
         b.note = (
             "车铲斗容匹配、装车时间 3~5 分钟；方案数值均由设备参数库直读计算（示例参数，需人工确认后报价）"
         )
+        # 规模适用性声明（真实案例验证发现的缺口：超大需求曾给出"看似合理"的巨型配置而不作任何提示）
+        if n_exc > SINGLE_PROJECT_MAX_EXC or n_truck > SINGLE_PROJECT_MAX_TRUCK:
+            b.note += (
+                f"；⚠️ 该需求规模超出本参数库的单项目建议配置上限"
+                f"（挖掘机 ≤{SINGLE_PROJECT_MAX_EXC} 台、矿车 ≤{SINGLE_PROJECT_MAX_TRUCK} 台），"
+                f"本次测算得出 挖掘机×{n_exc} + 矿车×{n_truck}，已超出适用范围："
+                f"建议拆分标段/分期配置，或改用更大吨位机型与专业选型软件复核，"
+                f"本结果不得直接用于报价。"
+            )
         if req.budget_cny > 0:
             over = b.fleet_total_cny > req.budget_cny
             b.note += "；" + ("超出预算，建议降档或议价" if over else "在预算范围内")
@@ -240,14 +253,28 @@ def generate_selection(db: Session, req: ParsedRequirement) -> SelectionResult:
     else:
         best_index = min(range(len(bundles)), key=lambda i: sum(t.total_3y_cny for t in bundles[i].tco))
 
+    assumptions = [
+        f"年作业 {WORK_DAYS_YEAR} 天 × 日作业 {WORK_HOURS_DAY:.0f} 小时；矿岩密度 {ORE_DENSITY} t/m3",
+        f"运距按 {2.8} km 测算；TCO 周期 {OPERATION_YEARS} 年",
+        "设备参数为公开渠道示例数据，正式方案需厂商确认",
+    ]
+    oversized = [
+        b
+        for b in bundles
+        if max((f.count for f in b.fleet if "挖掘机" in f.model_name), default=0) > SINGLE_PROJECT_MAX_EXC
+        or max((f.count for f in b.fleet if "自卸车" in f.model_name), default=0) > SINGLE_PROJECT_MAX_TRUCK
+    ]
+    if oversized:
+        assumptions.append(
+            f"⚠️ 适用范围声明：需求规模超出参数库单项目建议配置上限"
+            f"（挖掘机 ≤{SINGLE_PROJECT_MAX_EXC} 台、矿车 ≤{SINGLE_PROJECT_MAX_TRUCK} 台），"
+            f"{len(oversized)}/{len(bundles)} 套方案属超范围测算，仅作数学推演，"
+            f"不得直接用于报价；建议拆分标段或改用更大吨位机型复核。"
+        )
     return SelectionResult(
         bundles=bundles,
         best_index=best_index,
-        assumptions=[
-            f"年作业 {WORK_DAYS_YEAR} 天 × 日作业 {WORK_HOURS_DAY:.0f} 小时；矿岩密度 {ORE_DENSITY} t/m3",
-            f"运距按 {2.8} km 测算；TCO 周期 {OPERATION_YEARS} 年",
-            "设备参数为公开渠道示例数据，正式方案需厂商确认",
-        ],
+        assumptions=assumptions,
         citations=[
             {
                 "kb_type": "equipment",
