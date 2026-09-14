@@ -1,7 +1,0 @@
-chore(project-models): 补齐 cost_structure.joblib 产物契约并自证门控状态
-
-- evaluate_cost 返回最终拟合产物（Ridge + 特征列 + 训练项目 + 全局基准占比）
-- 落盘 data/models/project/cost_structure.joblib，产物内嵌 note 明示"门控关闭、仅供审计，
-  生产使用 baseline_model.json 的结构容差带"，避免被误当作生产模型调用
-- meta.json 增加 cost_feature_cols 与 artifacts 说明（哪些产物在产、哪些仅审计）
-- 测试补强：产物齐全性新增 cost_structure.joblib，并断言其自带门控说明与成本类型枚举
