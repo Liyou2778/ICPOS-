@@ -23,7 +23,12 @@
         "annual_t": 20956000,
         "duration_years": 1.0,
         "budget_cny": null,
-        "constraints": ["无人驾驶", "连续作业"]
+        "constraints": ["无人驾驶", "连续作业"],
+        "provenance": {
+          "annual": "published：报道原文'年度计划量 806 万立方米'",
+          "duration": "derived：报道为'2025 全年'（11 个月完成），按 12 个月=1 年折算",
+          "budget": "not_published：报道未披露合同额/预算，故 Agent 会追问预算"
+        }
       },
       "result": {
         "equipment": [{"name": "无人驾驶矿卡", "qty": 40, "note": "纳入集中管控与动态调度体系"}],
@@ -61,7 +66,12 @@
         "annual_t": 461760000,
         "duration_years": 5.0,
         "budget_cny": 7800000000,
-        "constraints": ["无人驾驶设备不低于 240 台", "剥离工程"]
+        "constraints": ["无人驾驶设备不低于 240 台", "剥离工程"],
+        "provenance": {
+          "annual": "derived：总工程量 8.88 亿 m³ ÷ 工期 5 年 = 1.776 亿 m³/年（总工程量为二手来源，待复核）",
+          "duration": "published：2026—2030 年剥离工程",
+          "budget": "published：4 标段标的总额 78 亿元（工程承包口径，含人工/燃油/管理/税费/利润）"
+        }
       },
       "result": {
         "equipment": [{"name": "无人驾驶矿卡", "qty": 271, "note": "招标要求 ≥240 台，实际落地 271 台（二手来源待复核）"}],
@@ -97,7 +107,12 @@
         "annual_t": null,
         "duration_years": null,
         "budget_cny": 28000000,
-        "constraints": ["纯电动", "75 吨级", "交货期 30 天"]
+        "constraints": ["纯电动", "75 吨级", "交货期 30 天"],
+        "provenance": {
+          "annual": "not_published：设备采购公告不含工程量",
+          "duration": "not_published：公告仅有交货期（≤30 天），非工程工期",
+          "budget": "published：A 包最高限价 2800 万元（中标 2600 万元）"
+        }
       },
       "result": {
         "equipment": [{"name": "75 吨级非公路纯电动矿用自卸车", "qty": 20}],
@@ -130,7 +145,12 @@
         "annual_t": null,
         "duration_years": null,
         "budget_cny": null,
-        "constraints": ["集中采购", "露天煤矿"]
+        "constraints": ["集中采购", "露天煤矿"],
+        "provenance": {
+          "annual": "not_published：集中采购公示不含工程量",
+          "duration": "not_published：公示不含工期",
+          "budget": "not_published：公示仅披露中标价 1799/1845 万元；探针文本中的'预算 1800 万元'是按中标价量级设定的**测试值**，非公告字段"
+        }
       },
       "result": {
         "equipment": [{"name": "液压挖掘机（批量，型号未公示）", "qty": null}],

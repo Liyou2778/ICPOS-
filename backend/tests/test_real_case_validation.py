@@ -177,6 +177,18 @@ def test_real_case_dataset_integrity():
             assert case.get(field), f"{case.get('id')} 缺少 {field}"
         assert case["source_tier"] in allowed_tiers
         assert case["source_url"].startswith("http")
+        # 三个关键槽位（年作业量/工期/预算）必须标注来源：published / derived / not_published
+        prov = case["requirement"].get("provenance")
+        assert prov, f"{case['id']} 缺少 provenance（无法区分公告原文、派生值与测试值）"
+        for key in ("annual", "duration", "budget"):
+            assert key in prov, f"{case['id']} provenance 缺少 {key}"
+            assert prov[key].split("：")[0] in {"published", "derived", "not_published"}, (
+                f"{case['id']}.{key} 来源类型非法：{prov[key]}"
+            )
+        if prov["budget"].startswith("not_published"):
+            assert case["requirement"].get("budget_cny") is None, (
+                f"{case['id']} 预算未披露却填了具体值（禁止用测试值充当公告字段）"
+            )
         # 探针文本不得篡改公告数字：关键数字必须能在文本中找到
         text = case["agent_probe_text"]
         for key, digits in (
