@@ -84,8 +84,11 @@ def main() -> int:
     ap.add_argument("--limit", type=int, default=120)
     ap.add_argument("--max-new-tokens", type=int, default=220)
     ap.add_argument("--top-k", type=int, default=3)
-    ap.add_argument("--dry-run", action="store_true",
-                    help="不加载模型：只跑检索并直接把【资料】当答案打分，得到'检索上界'基线")
+    ap.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="不加载模型：只跑检索并直接把【资料】当答案打分，得到'检索上界'基线",
+    )
     args = ap.parse_args()
 
     os.environ.setdefault("HF_ENDPOINT", "https://hf-mirror.com")
@@ -96,16 +99,18 @@ def main() -> int:
         from transformers import AutoModelForCausalLM, AutoTokenizer
 
         tok = AutoTokenizer.from_pretrained(args.base)
-        model = AutoModelForCausalLM.from_pretrained(
-            args.base,
-            torch_dtype=torch.bfloat16 if torch.cuda.is_bf16_supported() else torch.float16,
-            device_map={"": 0},
-        )
+        dtype = torch.bfloat16 if torch.cuda.is_bf16_supported() else torch.float16
+        try:  # transformers 5.x 推荐 dtype=，旧版用 torch_dtype=
+            model = AutoModelForCausalLM.from_pretrained(args.base, dtype=dtype, device_map={"": 0})
+        except TypeError:
+            model = AutoModelForCausalLM.from_pretrained(args.base, torch_dtype=dtype, device_map={"": 0})
         if args.adapter:
             from peft import PeftModel
 
             model = PeftModel.from_pretrained(model, args.adapter)
         model.eval()
+        used = torch.cuda.memory_allocated() / 1024**3
+        print(f"  模型已加载（{used:.2f} GiB 显存占用）")
     else:
         print("  [dry-run] 不加载模型：输出为检索资料本身（用于测量检索上界与校验打分链路）")
 
@@ -134,8 +139,7 @@ def main() -> int:
             else:
                 msgs = [{"role": "system", "content": SYSTEM}, {"role": "user", "content": user}]
                 prompt = tok.apply_chat_template(msgs, tokenize=False, add_generation_prompt=True)
-                inputs = tok(prompt, return_tensors="pt", truncation=True, max_length=2048).to(
-                    model.device)
+                inputs = tok(prompt, return_tensors="pt", truncation=True, max_length=2048).to(model.device)
                 with torch.no_grad():
                     out = model.generate(**inputs, max_new_tokens=args.max_new_tokens, do_sample=False)
                 pred = tok.decode(out[0][inputs["input_ids"].shape[1] :], skip_special_tokens=True)

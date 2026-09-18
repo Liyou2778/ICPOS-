@@ -44,7 +44,8 @@ def test_fault_code_query_hits_exact_entry(code: str):
     assert hits, f"{code} 检索无结果"
     top = hits[0]
     assert code in f"{top.title} {top.excerpt}".upper(), (
-        f"{code} Top1 未命中该故障码：{top.title} / {top.excerpt[:80]}")
+        f"{code} Top1 未命中该故障码：{top.title} / {top.excerpt[:80]}"
+    )
 
 
 def test_model_query_hits_exact_model():
@@ -70,5 +71,5 @@ def test_retrieval_coverage_floor():
     hit = rep["summary"]["num_hit_mean"]
     assert hit is not None
     assert hit >= 0.85, (
-        f"检索覆盖率退化到 {hit}（修复后基线 0.895，修复前 0.632）；"
-        f"报告：{candidates[-1].name}")
+        f"检索覆盖率退化到 {hit}（修复后基线 0.895，修复前 0.632）；报告：{candidates[-1].name}"
+    )

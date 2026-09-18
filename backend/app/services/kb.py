@@ -222,6 +222,7 @@ def index_project_corpus(db: Session) -> int:
 
 # ---------------------------------------------------------------- 全域语料（新）入库
 
+
 def index_unified_corpus(db: Session) -> dict:
     """把新全域语料（agent_train/project_test）中的知识型实体索引进知识库。
 
@@ -258,10 +259,15 @@ def index_unified_corpus(db: Session) -> dict:
                 "口径说明：规格为公开产品页数据；选配项与出厂日期为仿真补充，需厂商确认。",
             ]
         )
-        n += rag.index_entry(db, "equipment", f"设备型号档案：{m.get('model_name')}", content,
-                             tags=f"设备,型号,{m.get('equipment_subtype')},规格参数",
-                             source=m.get("source_url") or m.get("source_name") or "unified_corpus",
-                             version="V1.0")
+        n += rag.index_entry(
+            db,
+            "equipment",
+            f"设备型号档案：{m.get('model_name')}",
+            content,
+            tags=f"设备,型号,{m.get('equipment_subtype')},规格参数",
+            source=m.get("source_url") or m.get("source_name") or "unified_corpus",
+            version="V1.0",
+        )
     stats["equipment_model"] = n
 
     # 2) 价格与 TCO
@@ -280,9 +286,15 @@ def index_unified_corpus(db: Session) -> dict:
                 "数据边界：整机售价为公开渠道未披露项，价格按子类型市场区间构造，报价需厂商确认。",
             ]
         )
-        n += rag.index_entry(db, "price", f"价格与三年 TCO：{p.get('model_name')}", content,
-                             tags="价格,TCO,购置,能耗,维保,残值",
-                             source=p.get("source_name") or "unified_corpus", version="V1.0")
+        n += rag.index_entry(
+            db,
+            "price",
+            f"价格与三年 TCO：{p.get('model_name')}",
+            content,
+            tags="价格,TCO,购置,能耗,维保,残值",
+            source=p.get("source_name") or "unified_corpus",
+            version="V1.0",
+        )
     stats["equipment_price_tco"] = n
 
     # 3) 故障案例
@@ -301,9 +313,15 @@ def index_unified_corpus(db: Session) -> dict:
                 f"口径：{c.get('source_name')}",
             ]
         )
-        n += rag.index_entry(db, "maintenance", f"故障案例：{c.get('case_id')} {c.get('fault_code')} {c.get('fault_type')}",
-                             content, tags=f"故障,维修,{c.get('equipment_subtype')},{c.get('fault_code')}",
-                             source=c.get("source_name") or "unified_corpus", version="V1.0")
+        n += rag.index_entry(
+            db,
+            "maintenance",
+            f"故障案例：{c.get('case_id')} {c.get('fault_code')} {c.get('fault_type')}",
+            content,
+            tags=f"故障,维修,{c.get('equipment_subtype')},{c.get('fault_code')}",
+            source=c.get("source_name") or "unified_corpus",
+            version="V1.0",
+        )
     stats["fault_case"] = n
 
     # 4) 方案模板（同类型多条记录内容重复，按模板类型去重后入库）
@@ -318,16 +336,23 @@ def index_unified_corpus(db: Session) -> dict:
         content = "。".join(
             [
                 f"模板类型：{ttype}",
-                "章节结构：" + "；".join(
+                "章节结构："
+                + "；".join(
                     f"{ch.get('order')}. {ch.get('name')}（需填字段：{'、'.join(ch.get('required_fields') or [])}）"
                     for ch in chapters
                 ),
                 f"口径：{t.get('source_name')}",
             ]
         )
-        n += rag.index_entry(db, "template", f"方案模板：{ttype}", content,
-                             tags=f"模板,方案,{ttype}", source=t.get("source_name") or "unified_corpus",
-                             version="V1.0")
+        n += rag.index_entry(
+            db,
+            "template",
+            f"方案模板：{ttype}",
+            content,
+            tags=f"模板,方案,{ttype}",
+            source=t.get("source_name") or "unified_corpus",
+            version="V1.0",
+        )
     stats["project_template"] = n
     stats["project_template_types"] = len(seen)
 
@@ -348,9 +373,15 @@ def index_unified_corpus(db: Session) -> dict:
                 "数据边界：客户与合同为仿真数据（公开资料无可复用客户清单），不得作为真实客户信息引用。",
             ]
         )
-        n += rag.index_entry(db, "customer", f"客户档案：{c.get('customer_name')}", content,
-                             tags=f"客户,合同,{c.get('industry')},设备清单",
-                             source=c.get("source_name") or "unified_corpus", version="V1.0")
+        n += rag.index_entry(
+            db,
+            "customer",
+            f"客户档案：{c.get('customer_name')}",
+            content,
+            tags=f"客户,合同,{c.get('industry')},设备清单",
+            source=c.get("source_name") or "unified_corpus",
+            version="V1.0",
+        )
     stats["customer"] = n
 
     stats["eval_qa_excluded"] = len(by_type.get("evaluation_qa", []))

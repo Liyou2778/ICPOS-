@@ -130,8 +130,7 @@ class ChromaVectorStore(BaseVectorStore):
         n = self.col.count()
         if n:
             self.client.delete_collection("icops_kb")
-            self.col = self.client.get_or_create_collection(
-                "icops_kb", metadata={"hnsw:space": "cosine"})
+            self.col = self.client.get_or_create_collection("icops_kb", metadata={"hnsw:space": "cosine"})
         return n
 
 

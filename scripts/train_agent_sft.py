@@ -70,6 +70,7 @@ def train(
     max_len: int,
     limit: int | None,
     use_4bit: bool,
+    save_steps: int = 100,
 ) -> int:
     os.environ.setdefault("HF_ENDPOINT", "https://hf-mirror.com")
     os.environ.setdefault("HF_HUB_DISABLE_TELEMETRY", "1")
@@ -145,11 +146,12 @@ def train(
     inter, vocab = cfg.intermediate_size, cfg.vocab_size
     base_params = layers * (4 * hidden * hidden + 3 * hidden * inter + 2 * hidden) + vocab * hidden
     print(f"  可训练参数（LoRA）{trainable:,}")
-    print(f"  基座真实参数量 ≈ {base_params / 1e9:.2f} B"
-          f"（{'4-bit 量化加载' if quantized else 'bf16 加载'}）")
+    print(f"  基座真实参数量 ≈ {base_params / 1e9:.2f} B（{'4-bit 量化加载' if quantized else 'bf16 加载'}）")
 
+    ckpt_dir = OUT / "checkpoints"
+    has_ckpt = ckpt_dir.exists() and any(ckpt_dir.glob("checkpoint-*"))
     args = TrainingArguments(
-        output_dir=str(OUT / "checkpoints"),
+        output_dir=str(ckpt_dir),
         num_train_epochs=epochs,
         per_device_train_batch_size=batch,
         gradient_accumulation_steps=grad_accum,
@@ -157,7 +159,10 @@ def train(
         lr_scheduler_type="cosine",
         warmup_steps=50,  # transformers 5.x 已移除 warmup_ratio
         logging_steps=20,
-        save_strategy="no",
+        # 断点保存：本机会话中断会连带杀掉后台训练（已实测 3 次），必须能续训
+        save_strategy="steps",
+        save_steps=save_steps,
+        save_total_limit=2,
         bf16=(dtype == torch.bfloat16),
         fp16=(dtype != torch.bfloat16),
         optim="paged_adamw_8bit" if quantized else "adamw_torch",
@@ -168,10 +173,12 @@ def train(
     )
     collator = DataCollatorForSeq2Seq(tok, padding=True, label_pad_token_id=-100)
     trainer = Trainer(model=model, args=args, train_dataset=ds, data_collator=collator)
+    if has_ckpt:
+        print(f"  检测到检查点，断点续训：{sorted(p.name for p in ckpt_dir.glob('checkpoint-*'))}")
 
     t0 = time.perf_counter()
     try:
-        result = trainer.train()
+        result = trainer.train(resume_from_checkpoint=has_ckpt)
     except RuntimeError as exc:
         if "out of memory" in str(exc).lower():
             free_gib = total_gib = 0.0
@@ -243,6 +250,7 @@ def main() -> int:
     ap.add_argument("--grad-accum", type=int, default=8)
     ap.add_argument("--max-len", type=int, default=MAX_LEN)
     ap.add_argument("--limit", type=int, default=None, help="仅用前 N 条（冒烟用）")
+    ap.add_argument("--save-steps", type=int, default=100, help="每 N 步保存检查点（会话中断后可断点续训）")
     ap.add_argument("--no-4bit", action="store_true")
     args = ap.parse_args()
     if args.dry_run:
@@ -256,6 +264,7 @@ def main() -> int:
         args.max_len,
         args.limit,
         not args.no_4bit,
+        args.save_steps,
     )
 
 

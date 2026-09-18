@@ -150,6 +150,8 @@ npm run build                   # 产物 frontend/dist，单源托管由后端�
 | **全域语料模型（诚实结论：4 个均未过门控）** | ⚠️ 工期偏差 MAE **9.668 天** > 基线 9.326（R² -0.086）；成本偏差率 0.0620 > 0.0603；延期/超支分类 AUC **0.487/0.488** → 生产用标定基准（工期 P50 2 天 / P90 18 天） | `data/models/ops/eval_report.json` |
 | **知识库重建（新）** | ✅ 217 条目 = 217 向量；新增**真实公开徐工型号档案 15**（带官网链接）、价格 TCO 15、故障案例 105、方案模板 40、客户档案 10；6 项检索抽检全命中 | `scripts/rebuild_kb` |
 | **SFT 数据集（新）** | ✅ 训练 **5852 条**（含 **532 条拒答负样本**）；评测集 756 条**不参与训练**、**不入知识库**；外部评测集 5 条 | `scripts/build_sft_dataset` |
+| **Agent 微调 QLoRA（1.5B，8GB 显存）** | ⚠️ **已训练但不上线**：train_loss 2.294→0.386、57 分钟；评测显示**拒答正确率 0.50→1.00，但数字命中率 0.895→0.632**（过度拒答）→ 按门控关闭 adapter，生产用基座+修复后检索 | [`docs/validation/agent_sft_training_report.md`](docs/validation/agent_sft_training_report.md) |
+| **检索缺陷修复（评测发现）** | ✅ 故障码/型号精确召回：数字覆盖率 **0.632 → 0.895**（问 E106 不再命中 E107）；7 项回归测试 + 覆盖率门槛锁定 | `pytest backend/tests/test_retrieval_quality.py` |
 | **真实企业案例验证**（4 个可溯源案例：国家电投白音华 ×2、平煤神马、国家能源集团） | ✅ 解析 4/4、配置 2/2、阻塞/放行 4/4、规模诚实性 2/2；**并借此发现并修复 4 个缺陷**（吨级误判为工程量、总工程量当成年产量、识别不到"最高限价"、超规模静默给巨型配置） | `scripts/validate_agent_with_real_cases` + [`docs/validation/`](docs/validation/agent_real_case_validation.md) |
 
 > ⚠️ **真实案例验证暴露的边界（已写入文档，不得回避）**：参数库单价为示例数据，与真实成交价（75 吨级纯电矿卡

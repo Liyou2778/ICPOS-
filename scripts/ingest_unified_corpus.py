@@ -35,8 +35,19 @@ FILES = {
     "agent_train": CORPUS / "agent_train.jsonl",
     "project_test": CORPUS / "project_test.jsonl",
 }
-KEY_FIELDS = ("record_id", "qa_id", "case_id", "price_id", "template_id", "contract_id",
-              "organization_id", "user_id", "customer_id", "dispatch_id", "fault_id")
+KEY_FIELDS = (
+    "record_id",
+    "qa_id",
+    "case_id",
+    "price_id",
+    "template_id",
+    "contract_id",
+    "organization_id",
+    "user_id",
+    "customer_id",
+    "dispatch_id",
+    "fault_id",
+)
 
 
 def sha256(path: Path) -> str:
@@ -91,11 +102,18 @@ def load() -> tuple[dict[str, list[dict]], dict]:
                 examples[str(bool(obj.get("is_example")))] += 1
                 rows.append(obj)
         splits[split] = rows
-        manifest["files"].append({
-            "name": path.name, "bytes": path.stat().st_size, "sha256": sha256(path),
-            "rows": len(rows), "entity_types": dict(types), "data_origin": dict(origins),
-            "is_example": dict(examples), "invalid": invalid[:20],
-        })
+        manifest["files"].append(
+            {
+                "name": path.name,
+                "bytes": path.stat().st_size,
+                "sha256": sha256(path),
+                "rows": len(rows),
+                "entity_types": dict(types),
+                "data_origin": dict(origins),
+                "is_example": dict(examples),
+                "invalid": invalid[:20],
+            }
+        )
     totals: Counter = Counter()
     for f in manifest["files"]:
         totals.update(f["entity_types"])
@@ -168,7 +186,8 @@ def run(strict: bool = False) -> dict:
     splits, manifest = load()
     if strict and manifest["training_project_overlap"]:
         raise ValueError(
-            f"训练实体项目级交叉，禁止用于训练评估：overlap={manifest['training_project_overlap']}")
+            f"训练实体项目级交叉，禁止用于训练评估：overlap={manifest['training_project_overlap']}"
+        )
 
     db = SessionLocal()
     created: defaultdict = defaultdict(int)
@@ -178,97 +197,153 @@ def run(strict: bool = False) -> dict:
             for obj in rows:
                 et = str(obj.get("entity_type"))
                 key = _key(obj)
-                created["corpus_record"] += _upsert(db, CorpusRecord, "record_key", key, {
-                    "entity_type": et,
-                    "split": split,
-                    "data_origin": str(obj.get("data_origin") or ""),
-                    "is_example": bool(obj.get("is_example", True)),
-                    "source_name": str(obj.get("source_name") or ""),
-                    "source_url": str(obj.get("source_url") or obj.get("reference_source") or ""),
-                    "payload": obj,
-                }, filters={"entity_type": et}) or 0
+                created["corpus_record"] += (
+                    _upsert(
+                        db,
+                        CorpusRecord,
+                        "record_key",
+                        key,
+                        {
+                            "entity_type": et,
+                            "split": split,
+                            "data_origin": str(obj.get("data_origin") or ""),
+                            "is_example": bool(obj.get("is_example", True)),
+                            "source_name": str(obj.get("source_name") or ""),
+                            "source_url": str(obj.get("source_url") or obj.get("reference_source") or ""),
+                            "payload": obj,
+                        },
+                        filters={"entity_type": et},
+                    )
+                    or 0
+                )
 
                 if et == "mining_project_operation":
-                    created["proj_operation"] += _upsert(db, ProjOperation, "record_key", key, {
-                        "split": split,
-                        "project_id": str(obj.get("project_id") or ""),
-                        "project_name": str(obj.get("project_name") or ""),
-                        "region": str(obj.get("region") or ""),
-                        "scenario_type": str(obj.get("scenario_type") or ""),
-                        "terrain": str(obj.get("terrain") or ""),
-                        "quality_standard": str(obj.get("quality_standard") or ""),
-                        "constraints": obj.get("constraints") or {},
-                        "planned_start": str(obj.get("planned_start") or ""),
-                        "planned_duration_days": int(obj.get("planned_duration_days") or 0),
-                        "actual_duration_days": int(obj.get("actual_duration_days") or 0),
-                        "schedule_deviation_days": int(obj.get("schedule_deviation_days") or 0),
-                        "engineering_quantity_t": float(obj.get("engineering_quantity_t") or 0),
-                        "budget_cny": float(obj.get("budget_cny") or 0),
-                        "actual_cost_cny": float(obj.get("actual_cost_cny") or 0),
-                        "construction_task": str(obj.get("construction_task") or ""),
-                        "task_status": str(obj.get("task_status") or ""),
-                        "equipment_count": int(obj.get("equipment_count") or 0),
-                        "data_quality": str(obj.get("data_quality") or ""),
-                        "source_name": str(obj.get("source_name") or ""),
-                    }) or 0
+                    created["proj_operation"] += (
+                        _upsert(
+                            db,
+                            ProjOperation,
+                            "record_key",
+                            key,
+                            {
+                                "split": split,
+                                "project_id": str(obj.get("project_id") or ""),
+                                "project_name": str(obj.get("project_name") or ""),
+                                "region": str(obj.get("region") or ""),
+                                "scenario_type": str(obj.get("scenario_type") or ""),
+                                "terrain": str(obj.get("terrain") or ""),
+                                "quality_standard": str(obj.get("quality_standard") or ""),
+                                "constraints": obj.get("constraints") or {},
+                                "planned_start": str(obj.get("planned_start") or ""),
+                                "planned_duration_days": int(obj.get("planned_duration_days") or 0),
+                                "actual_duration_days": int(obj.get("actual_duration_days") or 0),
+                                "schedule_deviation_days": int(obj.get("schedule_deviation_days") or 0),
+                                "engineering_quantity_t": float(obj.get("engineering_quantity_t") or 0),
+                                "budget_cny": float(obj.get("budget_cny") or 0),
+                                "actual_cost_cny": float(obj.get("actual_cost_cny") or 0),
+                                "construction_task": str(obj.get("construction_task") or ""),
+                                "task_status": str(obj.get("task_status") or ""),
+                                "equipment_count": int(obj.get("equipment_count") or 0),
+                                "data_quality": str(obj.get("data_quality") or ""),
+                                "source_name": str(obj.get("source_name") or ""),
+                            },
+                        )
+                        or 0
+                    )
                 elif et == "evaluation_qa":
-                    created["eval_qa"] += _upsert(db, EvalQA, "qa_id", key, {
-                        "split": split,
-                        "data_origin": str(obj.get("data_origin") or ""),
-                        "source_name": str(obj.get("source_name") or ""),
-                        "source_url": str(obj.get("source_url") or ""),
-                        "question": str(obj.get("question") or ""),
-                        "expected_answer": str(obj.get("expected_answer") or ""),
-                        "reference_source": str(obj.get("reference_source") or ""),
-                        "category": str(obj.get("category") or ""),
-                    }) or 0
+                    created["eval_qa"] += (
+                        _upsert(
+                            db,
+                            EvalQA,
+                            "qa_id",
+                            key,
+                            {
+                                "split": split,
+                                "data_origin": str(obj.get("data_origin") or ""),
+                                "source_name": str(obj.get("source_name") or ""),
+                                "source_url": str(obj.get("source_url") or ""),
+                                "question": str(obj.get("question") or ""),
+                                "expected_answer": str(obj.get("expected_answer") or ""),
+                                "reference_source": str(obj.get("reference_source") or ""),
+                                "category": str(obj.get("category") or ""),
+                            },
+                        )
+                        or 0
+                    )
                 elif et == "equipment_price_tco":
-                    created["equip_price_tco"] += _upsert(db, EquipPriceTco, "price_id", key, {
-                        "split": split,
-                        "model_name": str(obj.get("model_name") or ""),
-                        "equipment_subtype": str(obj.get("equipment_subtype") or ""),
-                        "purchase_price_cny": float(obj.get("purchase_price_cny") or 0),
-                        "energy_type": str(obj.get("energy_type") or ""),
-                        "energy_cost_per_hour_cny": float(obj.get("energy_cost_per_hour_cny") or 0),
-                        "maintenance_cost_per_hour_cny": float(
-                            obj.get("maintenance_cost_per_hour_cny") or 0),
-                        "residual_value_rate_3y": float(obj.get("residual_value_rate_3y") or 0),
-                        "annual_operation_hours": float(obj.get("annual_operation_hours") or 0),
-                        "three_year_tco_cny": float(obj.get("three_year_tco_cny") or 0),
-                        "source_name": str(obj.get("source_name") or ""),
-                    }) or 0
+                    created["equip_price_tco"] += (
+                        _upsert(
+                            db,
+                            EquipPriceTco,
+                            "price_id",
+                            key,
+                            {
+                                "split": split,
+                                "model_name": str(obj.get("model_name") or ""),
+                                "equipment_subtype": str(obj.get("equipment_subtype") or ""),
+                                "purchase_price_cny": float(obj.get("purchase_price_cny") or 0),
+                                "energy_type": str(obj.get("energy_type") or ""),
+                                "energy_cost_per_hour_cny": float(obj.get("energy_cost_per_hour_cny") or 0),
+                                "maintenance_cost_per_hour_cny": float(
+                                    obj.get("maintenance_cost_per_hour_cny") or 0
+                                ),
+                                "residual_value_rate_3y": float(obj.get("residual_value_rate_3y") or 0),
+                                "annual_operation_hours": float(obj.get("annual_operation_hours") or 0),
+                                "three_year_tco_cny": float(obj.get("three_year_tco_cny") or 0),
+                                "source_name": str(obj.get("source_name") or ""),
+                            },
+                        )
+                        or 0
+                    )
                 elif et == "fault_case":
-                    created["fault_case"] += _upsert(db, FaultCase, "case_id", key, {
-                        "split": split,
-                        "source_name": str(obj.get("source_name") or ""),
-                        "equipment_subtype": str(obj.get("equipment_subtype") or ""),
-                        "fault_code": str(obj.get("fault_code") or ""),
-                        "fault_type": str(obj.get("fault_type") or ""),
-                        "abnormal_part": str(obj.get("abnormal_part") or ""),
-                        "root_cause": str(obj.get("root_cause") or ""),
-                        "severity": str(obj.get("severity") or ""),
-                        "repair_steps": obj.get("repair_steps") or [],
-                        "recommended_parts": obj.get("recommended_parts") or [],
-                        "maintenance_interval_hours": int(obj.get("maintenance_interval_hours") or 0),
-                        "estimated_downtime_hours": float(obj.get("estimated_downtime_hours") or 0),
-                    }) or 0
+                    created["fault_case"] += (
+                        _upsert(
+                            db,
+                            FaultCase,
+                            "case_id",
+                            key,
+                            {
+                                "split": split,
+                                "source_name": str(obj.get("source_name") or ""),
+                                "equipment_subtype": str(obj.get("equipment_subtype") or ""),
+                                "fault_code": str(obj.get("fault_code") or ""),
+                                "fault_type": str(obj.get("fault_type") or ""),
+                                "abnormal_part": str(obj.get("abnormal_part") or ""),
+                                "root_cause": str(obj.get("root_cause") or ""),
+                                "severity": str(obj.get("severity") or ""),
+                                "repair_steps": obj.get("repair_steps") or [],
+                                "recommended_parts": obj.get("recommended_parts") or [],
+                                "maintenance_interval_hours": int(obj.get("maintenance_interval_hours") or 0),
+                                "estimated_downtime_hours": float(obj.get("estimated_downtime_hours") or 0),
+                            },
+                        )
+                        or 0
+                    )
                 elif et == "equipment_telemetry":
                     telemetry_by_status[str(obj.get("status"))] += 1
-                    created["corpus_telemetry"] += _upsert(db, CorpusTelemetry, "record_key", key, {
-                        "split": split,
-                        "device_id": str(obj.get("device_id") or ""),
-                        "model_name": str(obj.get("model_name") or ""),
-                        "equipment_subtype": str(obj.get("equipment_subtype") or ""),
-                        "project_id": str(obj.get("project_id") or ""),
-                        "timestamp": str(obj.get("timestamp") or ""),
-                        "temperature_c": float(obj.get("temperature_c") or 0),
-                        "hydraulic_pressure_mpa": float(obj.get("hydraulic_pressure_mpa") or 0),
-                        "vibration": float(obj.get("vibration") or 0),
-                        "fuel_consumption_lph": float(obj.get("fuel_consumption_lph") or 0),
-                        "load_t": float(obj.get("load_t") or 0),
-                        "status": str(obj.get("status") or ""),
-                        "construction_task": str(obj.get("construction_task") or ""),
-                    }) or 0
+                    created["corpus_telemetry"] += (
+                        _upsert(
+                            db,
+                            CorpusTelemetry,
+                            "record_key",
+                            key,
+                            {
+                                "split": split,
+                                "device_id": str(obj.get("device_id") or ""),
+                                "model_name": str(obj.get("model_name") or ""),
+                                "equipment_subtype": str(obj.get("equipment_subtype") or ""),
+                                "project_id": str(obj.get("project_id") or ""),
+                                "timestamp": str(obj.get("timestamp") or ""),
+                                "temperature_c": float(obj.get("temperature_c") or 0),
+                                "hydraulic_pressure_mpa": float(obj.get("hydraulic_pressure_mpa") or 0),
+                                "vibration": float(obj.get("vibration") or 0),
+                                "fuel_consumption_lph": float(obj.get("fuel_consumption_lph") or 0),
+                                "load_t": float(obj.get("load_t") or 0),
+                                "status": str(obj.get("status") or ""),
+                                "construction_task": str(obj.get("construction_task") or ""),
+                            },
+                        )
+                        or 0
+                    )
         db.commit()
 
         counts = {
@@ -282,14 +357,18 @@ def run(strict: bool = False) -> dict:
         manifest["created"] = dict(created)
         manifest["counts"] = counts
         manifest["telemetry_status"] = dict(telemetry_by_status)
-        manifest["note"] = ("equipment_model/equipment_instance/equipment_trajectory/dispatch_event/"
-                            "project_template/customer 域等记录保存在 corpus_record 暂存表中，"
-                            "训练与检索按需从暂存表取用（不做有损映射）")
+        manifest["note"] = (
+            "equipment_model/equipment_instance/equipment_trajectory/dispatch_event/"
+            "project_template/customer 域等记录保存在 corpus_record 暂存表中，"
+            "训练与检索按需从暂存表取用（不做有损映射）"
+        )
         (CORPUS / "unified_manifest.json").write_text(
-            json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
+            json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
         report = {"generated_at": datetime.now(UTC).isoformat(), **manifest}
         (CORPUS / "unified_ingest_report.json").write_text(
-            json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
+            json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
         return report
     finally:
         db.close()
@@ -306,8 +385,10 @@ def main() -> int:
     et = r["training_entity"]
     split = r["per_entity_split"].get(et, {})
     proj = split.get("projects", {})
-    print(f"  训练实体 {et}：项目 train {proj.get('agent_train')} / test {proj.get('project_test')} "
-          f"/ 交叉 {r['training_project_overlap']}")
+    print(
+        f"  训练实体 {et}：项目 train {proj.get('agent_train')} / test {proj.get('project_test')} "
+        f"/ 交叉 {r['training_project_overlap']}"
+    )
     print(f"  切分说明：{r['split_note']}")
     print(f"  入库：{r['counts']}")
     print(f"  本次新增：{r['created']}")
