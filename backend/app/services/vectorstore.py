@@ -25,6 +25,10 @@ class BaseVectorStore:
 
     def count(self) -> int: ...
 
+    def reset(self) -> int:
+        """清空全部向量，返回清空前的条目数（知识库整体重建时使用）。"""
+        raise NotImplementedError
+
 
 class BuiltinVectorStore(BaseVectorStore):
     """内置降级向量库：numpy 余弦检索 + JSON/二进制持久化。"""
@@ -81,6 +85,15 @@ class BuiltinVectorStore(BaseVectorStore):
     def count(self) -> int:
         return len(self.records)
 
+    def reset(self) -> int:
+        n = len(self.records)
+        self.records = []
+        self.vectors = None
+        for f in (self.meta_file, self.vec_file):
+            if f.exists():
+                f.unlink()
+        return n
+
 
 def embed_one_local(text: str) -> np.ndarray:
     return local_embed_texts([text])[0].reshape(-1)
@@ -112,6 +125,14 @@ class ChromaVectorStore(BaseVectorStore):
 
     def count(self) -> int:
         return self.col.count()
+
+    def reset(self) -> int:
+        n = self.col.count()
+        if n:
+            self.client.delete_collection("icops_kb")
+            self.col = self.client.get_or_create_collection(
+                "icops_kb", metadata={"hnsw:space": "cosine"})
+        return n
 
 
 class VectorStoreFactory:

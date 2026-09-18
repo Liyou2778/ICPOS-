@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-09-14T12:57:27.331780+00:00",
+  "generated_at": "2026-09-14T13:54:25.836179+00:00",
   "dataset": "ICoPS Agent 真实企业案例验证集",
   "constants": {
     "density_t_per_m3": 2.6,
@@ -12,18 +12,165 @@
     ]
   },
   "summary": {
-    "cases": 4,
-    "parse_pass": 4,
-    "config_applicable": 2,
-    "config_pass": 2,
-    "blocking_pass": 4,
-    "scale_honesty_applicable": 2,
-    "scale_honesty_pass": 2,
+    "cases": 5,
+    "parse_pass": 5,
+    "config_applicable": 3,
+    "config_pass": 3,
+    "blocking_pass": 5,
+    "scale_honesty_applicable": 3,
+    "scale_honesty_pass": 3,
+    "mandatory_specs_applicable": 1,
+    "mandatory_specs_pass": 0,
+    "mandatory_specs_violations": {
+      "baiyinhua_lot1_prequalification_2026_2030": [
+        "采装设备斗容不足：推荐 70吨级矿山型液压挖掘机 斗容 6.0 m³ < 业主要求 7 m³",
+        "采装设备台数不足：推荐 12 台 < 业主要求 15 台",
+        "运输设备台数不足：推荐 76 台 < 业主要求 100 台（无人 ≥50 + 有人 ≥50）"
+      ]
+    },
     "out_of_scope_cases": [
+      "baiyinhua_lot1_prequalification_2026_2030",
       "baiyinhua_stripping_2026_2030"
     ]
   },
   "results": [
+    {
+      "id": "baiyinhua_lot1_prequalification_2026_2030",
+      "title": "白音华露天矿 2026—2030 年剥离工程一标段施工项目（5 年）资格预审公告",
+      "source_tier": "tender_aggregator_fulltext",
+      "source_url": "http://main.dlzbxx.com/project/452594.html",
+      "parse": {
+        "parsed": {
+          "scene_type": "mining",
+          "annual_t": 89643840.0,
+          "annual_m3": 34478400.0,
+          "duration_years": 5.0,
+          "budget_cny": 0.0,
+          "constraints": [],
+          "missing": [
+            "budget"
+          ]
+        },
+        "checks": [
+          {
+            "item": "年工程量解析",
+            "expected": 89643840,
+            "got": 89643840.0,
+            "rel_dev": 0.0,
+            "pass": true
+          },
+          {
+            "item": "工期解析",
+            "expected": 5.0,
+            "got": 5.0,
+            "rel_dev": 0.0,
+            "pass": true
+          },
+          {
+            "item": "约束识别（记录项，不判失败）",
+            "expected": [
+              "无人驾驶",
+              "燃油重卡（业主暂不具备供电及电车运行条件）",
+              "三班三倒",
+              "100% 自有设备"
+            ],
+            "got": [],
+            "matched": [],
+            "pass": true
+          }
+        ],
+        "pass": true
+      },
+      "configuration": {
+        "required_daily_t": 271648.0,
+        "best_bundle": {
+          "name": "经济适配型",
+          "fleet": [
+            {
+              "model": "70吨级矿山型液压挖掘机",
+              "count": 12,
+              "unit_price_cny": 4300000.0,
+              "total_price_cny": 51600000.0
+            },
+            {
+              "model": "90吨级非公路自卸车",
+              "count": 76,
+              "unit_price_cny": 4700000.0,
+              "total_price_cny": 357200000.0
+            }
+          ],
+          "daily_capacity_t": 289706.3,
+          "utilization_est": 0.938,
+          "fleet_total_cny": 408800000.0,
+          "tco_3y_total_cny": 848602880.0,
+          "coverage_ratio": 1.066,
+          "note": "车铲斗容匹配、装车时间 3~5 分钟；方案数值均由设备参数库直读计算（示例参数，需人工确认后报价）；⚠️ 该需求规模超出本参数库的单项目建议配置上限（挖掘机 ≤10 台、矿车 ≤50 台），本次测算得出 挖掘机×12 + 矿车×76，已超出适用范围：建议拆分标段/分期配置，或改用更大吨位机型与专业选型软件复核，本结果不得直接用于报价。"
+        },
+        "assumptions": [
+          "年作业 330 天 × 日作业 20 小时；矿岩密度 2.6 t/m3",
+          "运距按 2.8 km 测算；TCO 周期 3 年",
+          "设备参数为公开渠道示例数据，正式方案需厂商确认",
+          "⚠️ 适用范围声明：需求规模超出参数库单项目建议配置上限（挖掘机 ≤10 台、矿车 ≤50 台），3/3 套方案属超范围测算，仅作数学推演，不得直接用于报价；建议拆分标段或改用更大吨位机型复核。"
+        ],
+        "checks": [
+          {
+            "item": "机型全部来自参数库（防幻觉）",
+            "unknown_models": [],
+            "pass": true
+          },
+          {
+            "item": "购置总额可复算（单价×台数）",
+            "reported": 408800000.0,
+            "recomputed": 408800000.0,
+            "pass": true
+          },
+          {
+            "item": "车铲比落在行业区间 3.0~8.0",
+            "got": 6.33,
+            "pass": true
+          }
+        ],
+        "truck_to_excavator_ratio": 6.33
+      },
+      "scale_honesty": {
+        "out_of_scope": true,
+        "recommended_fleet": {
+          "excavator": 12,
+          "truck": 76
+        },
+        "limits": {
+          "excavator": 10,
+          "truck": 50
+        },
+        "declared_limit_in_output": true,
+        "pass": true,
+        "note": "规模超限时必须在输出中显式声明适用范围；未声明则记为待改进项（不掩饰）"
+      },
+      "mandatory_specs": {
+        "applicable": true,
+        "violations": [
+          "采装设备斗容不足：推荐 70吨级矿山型液压挖掘机 斗容 6.0 m³ < 业主要求 7 m³",
+          "采装设备台数不足：推荐 12 台 < 业主要求 15 台",
+          "运输设备台数不足：推荐 76 台 < 业主要求 100 台（无人 ≥50 + 有人 ≥50）"
+        ],
+        "declared_no_compliant_model": false,
+        "pass": false,
+        "note": "存在不满足业主硬性门槛的推荐时，必须显式提示'无适配机型/不满足门槛'；静默推荐小一号设备属严重缺陷（招标场景=废标风险）"
+      },
+      "blocking": {
+        "agent": "requirement",
+        "params_complete": false,
+        "expected_behaviour": "阻塞并追问",
+        "actual_blocked": true,
+        "pass": true,
+        "note": "参数不全却硬做方案、或参数齐备却反复追问，都属异常行为"
+      },
+      "price_reference": {
+        "applicable": false,
+        "note": "招标原件给出了**业主强制设备门槛**（斗容 ≥7 m³、载重 ≥80 t、无人/有人各 ≥50 台、采装 ≥15 台），这是可硬判的合规基准——用于检验 Agent 推荐的机型是否满足业主硬性要求。"
+      },
+      "configuration_checks_pass": true
+    },
     {
       "id": "baiyinhua_unmanned_stripping_2025",
       "title": "国家电投内蒙古公司白音华露天矿无人驾驶剥离（2025 年度）",
@@ -143,6 +290,11 @@
         "declared_limit_in_output": false,
         "pass": true,
         "note": "规模超限时必须在输出中显式声明适用范围；未声明则记为待改进项（不掩饰）"
+      },
+      "mandatory_specs": {
+        "applicable": false,
+        "pass": null,
+        "note": "该案例无业主强制设备门槛"
       },
       "blocking": {
         "agent": "requirement",
@@ -273,6 +425,11 @@
         "pass": true,
         "note": "规模超限时必须在输出中显式声明适用范围；未声明则记为待改进项（不掩饰）"
       },
+      "mandatory_specs": {
+        "applicable": false,
+        "pass": null,
+        "note": "该案例无业主强制设备门槛"
+      },
       "blocking": {
         "agent": "solution",
         "params_complete": true,
@@ -343,6 +500,11 @@
         "declared_limit_in_output": false,
         "note": "该案例无工程量，规模适用性判定不适用"
       },
+      "mandatory_specs": {
+        "applicable": false,
+        "pass": null,
+        "note": "该案例无业主强制设备门槛"
+      },
       "blocking": {
         "agent": "requirement",
         "params_complete": false,
@@ -409,6 +571,11 @@
         "pass": null,
         "declared_limit_in_output": false,
         "note": "该案例无工程量，规模适用性判定不适用"
+      },
+      "mandatory_specs": {
+        "applicable": false,
+        "pass": null,
+        "note": "该案例无业主强制设备门槛"
       },
       "blocking": {
         "agent": "requirement",

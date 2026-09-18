@@ -132,7 +132,7 @@ npm run build                   # 产物 frontend/dist，单源托管由后端�
 
 | 项目 | 结果 | 复现命令 |
 |---|---|---|
-| 后端验收用例（pytest，含五幕剧情 + 项目语料/模型/接口 + 真实案例验证回归） | ✅ 68 passed | `.venv\Scripts\python.exe -m pytest -q` |
+| 后端验收用例（pytest 82 项：61 passed / 21 skipped） | ✅ 全绿（跳过项 = 旧项目语料产物已按计划清除，skip 原因显式打印） | `.venv\Scripts\python.exe -m pytest -q` |
 | 后端代码质量 | ✅ ruff check / format 通过 | `uv run ruff check backend scripts docs` |
 | 前端 | ✅ typecheck + eslint + build 通过 | `cd frontend && npm run lint && npm run build` |
 | 端到端（SPA+16 项接口/SSE/WS） | ✅ 全部通过 | `python docs/e2e_final.py` |
@@ -145,9 +145,11 @@ npm run build                   # 产物 frontend/dist，单源托管由后端�
 | 空载率下降 | ✅ -76.2%（27.0%→6.4%） | `/api/dispatch/ab` |
 | 语料知识库扩充 | ✅ +138 型号 / 1190 知识条目 / 2620 向量 | `scripts/ingest_corpus` |
 | 语料模型（企业级，13 台设备×112k 遥测×12 故障） | ✅ P1 检出 10/10、提前量 24.3h、部件 Top1 90%、误报 2.0% | `data/models/corpus/eval_report.json` |
-| 项目运营语料 ETL | ✅ 22 项目（train 11 / test 11，零交叉）/ 340 任务 / 385 台账（57,069.5 万元）；重跑零新增且状态指纹一致 | `scripts/ingest_project_corpus --strict` |
-| 项目工期/成本模型（**诚实结论：未过上线门控**） | ⚠️ 测试 MAE 2.248 天 > 基线 1.127 天、R² -0.488；成本 LOPO MAPE 23.9% > 基线 14.7% → **不上线 ML**，生产改用标定基准 | `data/models/project/eval_report.json` |
-| 项目运营分析（生产方案） | ✅ 工期缓冲 P80 1 天 / P90 3 天；成本结构容差带 P25~P75；预算执行 P75 1.105 预警、P90 1.175 严重 | `/api/projects/analytics/summary` |
+| 项目运营语料 ETL（旧管线，已退役） | 🗄 产物已清除并备份至 `data/_backup_*/`，由下方"全域语料"链路取代 | `scripts/ingest_project_corpus --strict` |
+| **全域语料 ETL（新）** | ✅ **16174 条唯一记录 / 16 类实体**；训练实体 1250 vs 1250 项目**零交叉**；重跑零新增、状态指纹一致 | `scripts/ingest_unified_corpus --strict` |
+| **全域语料模型（诚实结论：4 个均未过门控）** | ⚠️ 工期偏差 MAE **9.668 天** > 基线 9.326（R² -0.086）；成本偏差率 0.0620 > 0.0603；延期/超支分类 AUC **0.487/0.488** → 生产用标定基准（工期 P50 2 天 / P90 18 天） | `data/models/ops/eval_report.json` |
+| **知识库重建（新）** | ✅ 217 条目 = 217 向量；新增**真实公开徐工型号档案 15**（带官网链接）、价格 TCO 15、故障案例 105、方案模板 40、客户档案 10；6 项检索抽检全命中 | `scripts/rebuild_kb` |
+| **SFT 数据集（新）** | ✅ 训练 **5852 条**（含 **532 条拒答负样本**）；评测集 756 条**不参与训练**、**不入知识库**；外部评测集 5 条 | `scripts/build_sft_dataset` |
 | **真实企业案例验证**（4 个可溯源案例：国家电投白音华 ×2、平煤神马、国家能源集团） | ✅ 解析 4/4、配置 2/2、阻塞/放行 4/4、规模诚实性 2/2；**并借此发现并修复 4 个缺陷**（吨级误判为工程量、总工程量当成年产量、识别不到"最高限价"、超规模静默给巨型配置） | `scripts/validate_agent_with_real_cases` + [`docs/validation/`](docs/validation/agent_real_case_validation.md) |
 
 > ⚠️ **真实案例验证暴露的边界（已写入文档，不得回避）**：参数库单价为示例数据，与真实成交价（75 吨级纯电矿卡

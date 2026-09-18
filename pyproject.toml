@@ -25,6 +25,18 @@ dependencies = [
 [project.optional-dependencies]
 # 完整模式：Chroma 向量库（离线演示模式可不用，自动降级为内置向量存储）
 vector = ["chromadb>=0.5"]
+# Agent 微调（SFT）：8GB 显存可跑 Qwen2.5-1.5B 的 4-bit QLoRA。
+# 安装（torch 走官方 CUDA 源，避免拿到 CPU-only 包）：
+#   uv pip install torch --index-url https://download.pytorch.org/whl/cu126
+#   uv pip install --extra train
+# 国内网络：export HF_ENDPOINT=https://hf-mirror.com（直连 huggingface.co 常不可达）
+train = [
+    "transformers>=4.57",
+    "peft>=0.14",
+    "datasets>=3.0",
+    "accelerate>=1.0",
+    "bitsandbytes>=0.45",
+]
 
 [dependency-groups]
 dev = ["ruff>=0.8"]

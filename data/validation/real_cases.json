@@ -10,6 +10,56 @@
   "density_t_per_m3": 2.6,
   "cases": [
     {
+      "id": "baiyinhua_lot1_prequalification_2026_2030",
+      "title": "白音华露天矿 2026—2030 年剥离工程一标段施工项目（5 年）资格预审公告",
+      "customer": "国家电力投资集团有限公司（业主：国家电投集团内蒙古能源有限责任公司）",
+      "source_name": "中国电力招标信息网（招标原件全文转载；权威原文在国家电投电子商务平台，需注册/会员）",
+      "source_url": "http://main.dlzbxx.com/project/452594.html",
+      "source_tier": "tender_aggregator_fulltext",
+      "publish_date": "2025-09-01",
+      "requirement": {
+        "raw": "白音华露天矿 2026—2030 年剥离工程一标段（5 年）：露天煤矿土岩剥离物的采装、运输、排卸，排土场削坡整形与覆土；计划工期自合同签订之日起至 2030-12-31 共 5 年；一标段剥离总量 17239.2 万立方米（其中有人驾驶 8798.9 万 m³、无人驾驶 7876 万 m³、夹矸 330 万 m³），加权运距 4.37 千米、加权提升高度 53 米；地表土回收及覆土 234.3 万 m³；坡面整形覆土（削坡）82.5 万 m²。投标方自行配备设备与人员，三班三倒组织生产。",
+        "annual_m3": 34478400,
+        "annual_t": 89643840,
+        "duration_years": 5.0,
+        "budget_cny": null,
+        "constraints": ["无人驾驶", "燃油重卡（业主暂不具备供电及电车运行条件）", "三班三倒", "100% 自有设备"],
+        "owner_mandatory_specs": {
+          "note": "招标文件强制门槛（不满足即不响应）：以下为原文口径",
+          "excavator": {"bucket_m3_min": 7, "power_kw_min": 350, "count_min": 15},
+          "truck": {"rated_load_t_min": 80, "unmanned_count_min": 50, "manned_count_min": 50},
+          "dozer": {"power_kw_min": 250, "count_min": 4},
+          "loader": {"power_kw_min": 170, "count_min": 10},
+          "grader": {"power_kw_min": 220, "count_min": 4},
+          "equipment_built_after": "2023-01-01",
+          "mining_contract_grade": "矿山工程施工总承包一级或特级"
+        },
+        "provenance": {
+          "annual": "derived：一标段剥离总量 17239.2 万 m³ ÷ 工期 5 年 = 3447.84 万 m³/年（工程量为招标原件口径）",
+          "duration": "published：服务期限自合同签订之日起至 2030-12-31，共 5 年",
+          "budget": "not_published：一标段金额未单独披露（批次合计 78 亿元为行业媒体口径，不可与单标段混用）"
+        }
+      },
+      "result": {
+        "equipment": [
+          {"name": "采装设备（斗容 ≥7 m³）", "qty": null, "note": "招标要求不低于 15 台，实际投入未披露"},
+          {"name": "无人驾驶自卸车（≥80 t）", "qty": null, "note": "招标要求不低于 50 台/标段"},
+          {"name": "有人驾驶自卸车（≥80 t）", "qty": null, "note": "招标要求不低于 50 台/标段"}
+        ],
+        "lot_aggregate": {"lots": 4, "total_contract_cny": 7806000000,
+                          "unmanned_equipment_min_across_lots": 240,
+                          "source_note": "批次中标结果（4 标段）为行业媒体报道口径；标段与报价的逐条对应关系未在公告中确认"},
+        "contract_cny": null
+      },
+      "derived_benchmarks": {
+        "annual_m3": 34478400,
+        "daily_t_at_330d": 271648,
+        "scope_note": "招标原件给出了**业主强制设备门槛**（斗容 ≥7 m³、载重 ≥80 t、无人/有人各 ≥50 台、采装 ≥15 台），这是可硬判的合规基准——用于检验 Agent 推荐的机型是否满足业主硬性要求。"
+      },
+      "agent_probe_text": "白音华露天矿 2026—2030 年剥离工程一标段（5 年），剥离总量 17239.2 万立方米，露天煤矿土岩剥离的采装、运输、排卸，工期 5 年，加权运距 4.37 千米，请推荐设备配置方案",
+      "comparability": "本案例是**合规门槛测试**：招标原件强制要求采装设备斗容 ≥7 m³，而本项目设备参数库最大挖掘机为 XE700（6.0 m³）——用于检验 Agent 是否会推荐不满足业主硬性门槛的机型而不作提示。"
+    },
+    {
       "id": "baiyinhua_unmanned_stripping_2025",
       "title": "国家电投内蒙古公司白音华露天矿无人驾驶剥离（2025 年度）",
       "customer": "国家电投内蒙古公司白音华露天矿",

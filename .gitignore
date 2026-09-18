@@ -24,6 +24,18 @@ data/generated/*
 data/run/*
 !data/generated/.gitkeep
 
+# SFT 数据集与评测集由 scripts/build_sft_dataset.py 生成
+data/sft/
+# 训练产物备份（本地保留，不入库）
+data/_backup_*/
+
+# 训练环境缓存（体积大：torch/模型权重缓存，禁止入库）
+.uv-cache/
+.pip-cache/
+.uv-python/
+*.safetensors
+*.gguf
+
 # Frontend build artifacts
 frontend/node_modules/
 frontend/dist/

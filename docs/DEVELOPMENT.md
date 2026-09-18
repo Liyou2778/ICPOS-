@@ -200,13 +200,64 @@ tender-anchor/{code},cost-structure/{code}}`、`POST cost-forecast`、`POST task
 为按锚点仿真生成，**不是真实施工记录**；样本量小（已完工可标注任务 126 条 / 项目 20 个 / 台账 385 条），
 置信区间宽，结论不可外推为行业规律；所有输出定位为决策参考，需人工确认。
 
+> ⚠️ **该管线已退役（2026-09-18）**：本轮按"以新全域语料重建训练"的要求，清除了本节的模型产物
+> （`data/models/project/*`，已备份至 `data/_backup_*/project/`），并整体重建了知识库。
+> 项目运营建模由 §3.5 的 `scripts/train_ops_models`（2500 条样本，产物 `data/models/ops`）取代；
+> 本节保留作为历史口径与旧产物恢复说明（重跑 `scripts.ingest_project_corpus` + `scripts.train_project_models`
+> 即可从备份语料恢复）。相关 pytest 用例在产物缺失时显式跳过，不会假装通过。
+
+### 3.5 全域语料与 Agent 微调管线（新；8GB 显存可跑）
+
+**语料**：`data/corpus/agent_train.jsonl` + `project_test.jsonl`（各 8092 行，共 **16174 条唯一记录 / 16 类实体**），
+按项目切分为两半：训练实体 `mining_project_operation` 的 **1250 vs 1250 个项目零交叉**。
+
+```powershell
+.\.venv\Scripts\python.exe -m scripts.ingest_unified_corpus --strict   # ① ETL：暂存表 + 5 张类型化表 + 血缘清单
+.\.venv\Scripts\python.exe -m scripts.train_ops_models                 # ② 工期/成本 4 模型（含门控与标定基准）
+.\.venv\Scripts\python.exe -m scripts.rebuild_kb                       # ③ 知识库整体重建（清空 + 种子库 + 全域语料）
+.\.venv\Scripts\python.exe -m scripts.build_sft_dataset                # ④ SFT 训练集 + 评测集
+.\.venv\Scripts\python.exe -m scripts.train_agent_sft --dry-run        # ⑤ 微调前校验（不加载模型）
+.\.venv\Scripts\python.exe -m scripts.train_agent_sft --epochs 2       #    LoRA/QLoRA 微调（后台运行）
+.\.venv\Scripts\python.exe -m scripts.eval_agent_sft --tag base --limit 120   # ⑥ 微调前评测
+.\.venv\Scripts\python.exe -m scripts.eval_agent_sft --tag lora --limit 120 --adapter data\models\agent_sft\adapter
+```
+
+**① ETL 产出（实测）**：16174 条唯一记录（跨文件重复 10）；16 类实体；暂存表 `corpus_record` 全量保留原始 payload；
+类型化表 `corpus_proj_operation`(2500) / `corpus_eval_qa`(756) / `corpus_equip_price_tco`(15) /
+`corpus_fault_case`(105) / `corpus_telemetry`(10800)；血缘清单 `data/corpus/unified_manifest.json`（SHA-256 + 按实体交叉检查）。
+**重要治理发现**：项目切分只在训练实体上干净，遥测/调度/轨迹等仿真实体两类文件共用 SIM-PROJECT 编号
+→ `--strict` 首跑即拦截，manifest 显式声明"这些实体不可用于 train/test 划分"。
+
+**② 模型结果（2500 条样本，全部未过门控）**：工期偏差回归 测试 MAE **9.668 天** > 基线 9.326（R² -0.086）；
+成本偏差率回归 MAE 0.0620 > 基线 0.0603；延期分类 AUC **0.487**、超支分类 AUC **0.488**（均低于随机）。
+单特征最大相关 0.088 → **该仿真的偏差与特征无关，7 倍样本量仍无信号**。生产采用标定基准：
+工期偏差 P50 2 天 / P90 18 天；成本偏差率 P50 0.0009 / P90 0.0928。产物 `data/models/ops/`。
+
+**③ 知识库（217 条目 = 217 向量）**：种子设备参数库 12 型号 + 故障码 54 + 工艺 6 分块 + 模板 3 分块 +
+招标锚点 23 分块；全域语料新增 **真实公开设备型号档案 15**（徐工官网规格，带 source_url）、**价格与 TCO 15**、
+**故障案例 105**、**方案模板 40（按类型去重）**、**客户档案 10**。
+
+**④ SFT 数据集**：训练 **5852 条**（含 **532 条拒答负样本**），采用"检索接地式"指令对——
+user 消息内嵌【资料】，要求仅依据资料作答、数字不得改写、资料不足必须拒答；
+`evaluation_qa` **756 条不参与训练**（评测集），另导出外部评测集（真实招标案例 5 条）。
+**纪律**：`test_eval_questions_not_in_training_set` 与 `test_evaluation_qa_not_indexed_into_kb`
+保证"评测集既不进训练集、也不进知识库"，避免自证式评分。
+
+**⑤ 微调环境（本机实测）**：GPU **RTX 4060 Laptop 8 GB**；依赖经 uv 安装
+（`torch 2.14.0+cu126`、`transformers 5.17`、`peft 0.21`、`datasets 5.0.1`、`bitsandbytes 0.50`）；
+基座 Qwen2.5-1.5B-Instruct 经 **hf-mirror** 下载（本机 huggingface.co 不可达）。
+配置：4-bit QLoRA（bitsandbytes 可用）→ LoRA r=16/alpha=32，`max_len 1024`、batch 1 × 梯度累积 8、
+梯度检查点；冒烟实测 **1.57 样本/秒**（loss 2.294）。
+⚠️ transformers 5.x 已移除 `warmup_ratio`（改 `warmup_steps`），且 4-bit 下 `parameters()` 的 numel
+是打包存储单元数、**不能当参数量对外报**（脚本改为按 config 估算 1.5B 并单独标注）。
+
 ## 4. 启动 / 测试 / 验收
 ```powershell
 # 启动
 .\.venv\Scripts\python.exe -m uvicorn backend.app.main:app --reload
 # http://127.0.0.1:8000/docs · 演示账号 admin/icops2026（另有 sales、dispatcher、service、mine）
 
-# 验收用例（pytest 68 项：PRD 验收标准 + 五幕剧情链路 + 项目运营语料/模型/接口 + 真实案例验证回归）
+# 验收用例（pytest 82 项：61 passed / 21 skipped——跳过项均为"旧项目语料产物已按计划清除"，原因显式打印）
 .\.venv\Scripts\python.exe -m pytest -q
 
 # 真实企业案例验证（4 个可溯源案例；产物 data/validation/agent_validation_report.json）
@@ -232,7 +283,7 @@ uv run ruff check backend scripts data/simulator
 uv run ruff format backend scripts data/simulator
 ```
 
-### 68 项 pytest 覆盖（PRD 验收标准 + 五幕剧情链路 + 项目运营语料/模型 + 真实案例验证）
+### 82 项 pytest 覆盖（PRD 验收 + 五幕剧情 + 全域语料/模型/SFT + 真实案例验证）
 
 - `test_selection.py`：需求解析（完整/缺失追问）、≥3 套方案、TCO 四类、数值仅出自参数库、预算约束
 - `test_dispatch.py`：派单可解释原因、重调度排除故障车、确认下发生成派单、A/B 空载率下降 ≥15%
@@ -251,6 +302,14 @@ uv run ruff format backend scripts data/simulator
 - `test_real_case_validation.py`（**真实企业案例验证回归**）：锁定 4 个由真实案例发现的缺陷——
   "吨级"不得当作工程量、**"总工程量"须按工期折算年产量**、"最高限价/计划投资/合同额"等同义词识别预算、
   超规模需求必须显式声明适用范围（且正常需求不得出现噪声式免责声明）；另含验证集可溯源性与报告门禁
+- `test_unified_corpus.py`（**全域语料链路，12 项**）：ETL 幂等（零新增 + 无重复键 + 状态指纹一致）、
+  切分完整性（训练实体零交叉且其他实体交叉已声明）、血缘齐全、类型化表条数对账、
+  模型特征无泄漏、**门控结论与证据严格等价**、基准分位数单调、
+  SFT 数据集构成（含拒答负样本）、**评测问题不得进训练集**、**evaluation_qa 不得进知识库**、
+  知识条目与向量条数一一对应
+
+> **跳过项说明**：旧项目语料链路（`test_project_corpus_etl` / `test_project_models` / `test_project_analytics`，共 21 项）
+> 在产物被清除后显式 skip，跳过原因写明"已清除 + 备份位置 + 替代链路"，不会出现"静默通过"。
 
 ### Web 前端（React 18 · TypeScript · Vite · AntD5 · ECharts）
 

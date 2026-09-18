@@ -1,5 +1,13 @@
 """注册全部 ORM 模型，供 Base.metadata.create_all 建表。"""
 
+from backend.app.models.corpus import (
+    CorpusRecord,
+    CorpusTelemetry,
+    EquipPriceTco,
+    EvalQA,
+    FaultCase,
+    ProjOperation,
+)
 from backend.app.models.customer import Contract, Customer
 from backend.app.models.device import Device, EquipmentModel, SparePart
 from backend.app.models.dispatch import DispatchLog, DispatchOrder, DispatchPlan
@@ -12,17 +20,23 @@ __all__ = [
     "ChatMessage",
     "ChatSession",
     "Contract",
+    "CorpusRecord",
+    "CorpusTelemetry",
     "Customer",
     "DailyCost",
     "Device",
     "DispatchLog",
     "DispatchOrder",
     "DispatchPlan",
+    "EquipPriceTco",
     "EquipmentModel",
+    "EvalQA",
+    "FaultCase",
     "FaultCode",
     "KnowledgeEntry",
     "LLMCallLog",
     "MaintenancePlan",
+    "ProjOperation",
     "Project",
     "ProjectCost",
     "SolutionDocument",

@@ -239,6 +239,64 @@ def check_scale_honesty(case: dict, config: dict) -> dict:
     }
 
 
+def check_mandatory_specs(case: dict, config: dict, catalog: dict) -> dict:
+    """C7 业主硬性门槛合规性（招标原件口径）：推荐机型是否满足招标文件写死的设备门槛。
+
+    这是最"硬"的一条验证：门槛不满足即不响应（废标风险）。
+    若参数库无满足机型，正确做法是**明确提示无适配机型**，而不是照常推荐小一号设备。
+    """
+    specs = case["requirement"].get("owner_mandatory_specs")
+    if not specs:
+        return {"applicable": False, "pass": None, "note": "该案例无业主强制设备门槛"}
+    if not config.get("applicable", True):
+        return {"applicable": False, "pass": None, "note": "无工程量，未产生配置结果"}
+
+    fleet = config["best_bundle"]["fleet"]
+    exc_spec, truck_spec = specs.get("excavator", {}), specs.get("truck", {})
+    exc_rows = [f for f in fleet if "挖掘机" in f["model"]]
+    truck_rows = [f for f in fleet if "自卸车" in f["model"]]
+    violations: list[str] = []
+
+    for row in exc_rows:
+        model = catalog.get(row["model"])
+        # bucket_m3 在参数库中是独立列（spec 字典里只有循环/可用率等计算参数），两者都要取
+        bucket = (
+            float(getattr(model, "bucket_m3", 0) or (model.spec or {}).get("bucket_m3", 0)) if model else 0.0
+        )
+        if bucket < exc_spec.get("bucket_m3_min", 0):
+            violations.append(
+                f"采装设备斗容不足：推荐 {row['model']} 斗容 {bucket} m³ < 业主要求 {exc_spec['bucket_m3_min']} m³"
+            )
+    if exc_rows and sum(r["count"] for r in exc_rows) < exc_spec.get("count_min", 0):
+        violations.append(
+            f"采装设备台数不足：推荐 {sum(r['count'] for r in exc_rows)} 台 < 业主要求 {exc_spec['count_min']} 台"
+        )
+    for row in truck_rows:
+        model = catalog.get(row["model"])
+        load = float(model.rated_load_t or 0) if model else 0.0
+        if load < truck_spec.get("rated_load_t_min", 0):
+            violations.append(
+                f"运输设备载重不足：推荐 {row['model']} 载重 {load} t < 业主要求 {truck_spec['rated_load_t_min']} t"
+            )
+    need_trucks = truck_spec.get("unmanned_count_min", 0) + truck_spec.get("manned_count_min", 0)
+    if truck_rows and sum(r["count"] for r in truck_rows) < need_trucks:
+        violations.append(
+            f"运输设备台数不足：推荐 {sum(r['count'] for r in truck_rows)} 台 < 业主要求 {need_trucks} 台"
+            f"（无人 ≥{truck_spec.get('unmanned_count_min')} + 有人 ≥{truck_spec.get('manned_count_min')}）"
+        )
+
+    text = json.dumps(config, ensure_ascii=False)
+    declared = any(k in text for k in ("不满足", "无适配机型", "不响应", "废标", "门槛"))
+    return {
+        "applicable": True,
+        "violations": violations,
+        "declared_no_compliant_model": declared,
+        "pass": (not violations) or declared,
+        "note": "存在不满足业主硬性门槛的推荐时，必须显式提示'无适配机型/不满足门槛'；"
+        "静默推荐小一号设备属严重缺陷（招标场景=废标风险）",
+    }
+
+
 def check_price_reference(db, case: dict, catalog: dict) -> dict:
     """C5 报价量级：参数库单价 vs 真实成交单价（品类不同时只披露偏差，不判失败）。"""
     bench = case.get("derived_benchmarks", {})
@@ -306,6 +364,7 @@ def main() -> int:
                 "parse": check_parse(case),
                 "configuration": cfg,
                 "scale_honesty": check_scale_honesty(case, cfg),
+                "mandatory_specs": check_mandatory_specs(case, cfg, catalog),
                 "blocking": check_blocking_behaviour(db, case),
                 "price_reference": check_price_reference(db, case, catalog),
             }
@@ -324,6 +383,13 @@ def main() -> int:
         "blocking_pass": sum(1 for r in results if r["blocking"]["pass"]),
         "scale_honesty_applicable": sum(1 for r in results if r["scale_honesty"]["pass"] is not None),
         "scale_honesty_pass": sum(1 for r in results if r["scale_honesty"]["pass"]),
+        "mandatory_specs_applicable": sum(1 for r in results if r["mandatory_specs"]["pass"] is not None),
+        "mandatory_specs_pass": sum(1 for r in results if r["mandatory_specs"]["pass"]),
+        "mandatory_specs_violations": {
+            r["id"]: r["mandatory_specs"].get("violations", [])
+            for r in results
+            if r["mandatory_specs"].get("violations")
+        },
         "out_of_scope_cases": [r["id"] for r in results if r["scale_honesty"]["out_of_scope"]],
     }
     report = {
@@ -368,6 +434,15 @@ def main() -> int:
             f"已声明={sh['declared_limit_in_output']}"
             + (f" 配置={sh.get('recommended_fleet')}" if sh.get("recommended_fleet") else "")
         )
+        ms = r["mandatory_specs"]
+        if ms.get("pass") is not None:
+            m_mark = "✅" if ms["pass"] else "❌"
+            print(
+                f"  业主硬性门槛：{m_mark} 违规 {len(ms.get('violations', []))} 项 "
+                f"已提示无适配机型={ms['declared_no_compliant_model']}"
+            )
+            for v in ms.get("violations", []):
+                print(f"      · {v}")
         pr = r["price_reference"]
         if pr.get("applicable"):
             print(

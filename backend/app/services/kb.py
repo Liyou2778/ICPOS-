@@ -141,12 +141,13 @@ def index_project_corpus(db: Session) -> int:
 
     数据边界：project_budget 为公开招标公告锚点（real）；施工任务/成本台账为按锚点仿真生成
     （simulated），文档内显式标注，避免被当作真实施工记录引用。
+    招标锚点**不依赖**模型产物即可入库；成本构成/预算执行部分需标定基准存在才附带（否则省略）。
     """
     from backend.app.services import project_analytics as pj
 
-    if not pj.artifacts_ready():
-        logger.warning("项目分析基准缺失，跳过项目运营库入库（请先运行 train_project_models）")
-        return 0
+    baseline_ready = pj.artifacts_ready()
+    if not baseline_ready:
+        logger.warning("项目标定基准缺失：仅索引招标锚点，成本/预算口径部分省略")
     total = 0
     for p in pj.project_list(db, limit=500):
         anchor = pj.tender_anchor(db, p["code"])
@@ -166,7 +167,7 @@ def index_project_corpus(db: Session) -> int:
             f"批复单位：{anchor['approval_authority'] or '—'}",
             f"数据口径：{anchor['budget_scope'] or '公告原文口径'}",
         ]
-        if p["total_cost_yuan"]:
+        if baseline_ready and p["total_cost_yuan"]:
             cs = pj.cost_structure(db, p["code"])
             parts.append(f"成本台账合计：{cs['total_cost_yuan']:.0f} 元（期间 {'、'.join(cs['periods'])}）")
             parts.append(
@@ -198,24 +199,182 @@ def index_project_corpus(db: Session) -> int:
             source=anchor["source_url"] or f"project_corpus:{anchor['code']}",
             version="V1.0",
         )
-    total += rag.index_entry(
-        db,
-        "project",
-        "项目运营分析方法与模型评估结论",
-        "项目成本分析与工期缓冲采用标定统计基准法（calibrated_statistical_baseline），"
-        "不使用机器学习逐任务预测。评估协议：按项目划分训练/测试（零交叉），训练集内"
-        "Leave-One-Project-Out 交叉验证，独立测试集仅最终评估一次，全部指标与朴素基线对照。"
-        "评估结论：工期偏差回归在测试集 MAE 大于中位数基线、LOPO/5 折交叉验证 R² 小于 0，"
-        "单特征最大相关系数约 0.12，训练 R² 约 0.999（仅记忆噪声）；因此 ML 未通过上线门控。"
-        "生产方法：工期采用历史偏差分位数缓冲（P80 作为缓冲建议），成本采用结构占比 P25~P75 "
-        "容差带与预算执行比率分位数（P75 预警、P90 严重偏差）。"
-        "数据边界：标签为按真实招标锚点仿真生成，样本量小（已完工任务约 126 条、项目 20 个、"
-        "成本台账 385 条），结论不可外推为行业规律，输出仅作决策参考并需人工确认。",
-        tags="项目,成本分析,模型评估,上线门控,数据边界",
-        source="data/models/project/eval_report.json",
-        version="V1.0",
-    )
+    if baseline_ready:
+        total += rag.index_entry(
+            db,
+            "project",
+            "项目运营分析方法与模型评估结论",
+            "项目成本分析与工期缓冲采用标定统计基准法（calibrated_statistical_baseline），"
+            "不使用机器学习逐任务预测。评估协议：按项目划分训练/测试（零交叉），训练集内"
+            "Leave-One-Project-Out 交叉验证，独立测试集仅最终评估一次，全部指标与朴素基线对照。"
+            "评估结论：工期偏差回归在测试集 MAE 大于中位数基线、交叉验证 R² 小于 0，"
+            "单特征最大相关系数约 0.12，训练 R² 约 0.999（仅记忆噪声）；因此 ML 未通过上线门控。"
+            "生产方法：工期采用历史偏差分位数缓冲（P80 作为缓冲建议），成本采用结构占比 P25~P75 "
+            "容差带与预算执行比率分位数（P75 预警、P90 严重偏差）。"
+            "数据边界：标签为按真实招标锚点仿真生成，样本量小，结论不可外推为行业规律，"
+            "输出仅作决策参考并需人工确认。",
+            tags="项目,成本分析,模型评估,上线门控,数据边界",
+            source="data/models/project/eval_report.json",
+            version="V1.0",
+        )
     return total
+
+
+# ---------------------------------------------------------------- 全域语料（新）入库
+
+def index_unified_corpus(db: Session) -> dict:
+    """把新全域语料（agent_train/project_test）中的知识型实体索引进知识库。
+
+    入选实体：设备型号档案（真实公开规格）/ 价格与 TCO / 故障案例 / 方案模板（去重）/ 客户与合同域。
+    **不入库**：evaluation_qa —— 该 756 条问答作为 Agent 微调前后对比的黄金评测集，
+    一旦入库会被检索命中，导致"自己考自己"的评测污染。
+    """
+    from backend.app.models.corpus import CorpusRecord
+
+    rows = db.query(CorpusRecord.entity_type, CorpusRecord.payload).all()
+    by_type: dict[str, list[dict]] = {}
+    for et, payload in rows:
+        obj = json.loads(payload) if isinstance(payload, str) else payload
+        by_type.setdefault(et, []).append(obj)
+
+    stats: dict[str, int] = {}
+
+    # 1) 设备型号档案（真实公开）
+    n = 0
+    for m in by_type.get("equipment_model", []):
+        specs = m.get("specifications") or {}
+        cfg = m.get("configuration") or {}
+        content = "。".join(
+            [
+                f"型号：{m.get('model_name')}",
+                f"设备子类型：{m.get('equipment_subtype')}",
+                "技术规格：" + "；".join(f"{k}={v}" for k, v in specs.items()),
+                f"动力系统：{cfg.get('energy_system', '—')}",
+                f"作业方式：{cfg.get('operation_mode', '—')}",
+                f"工作装置：{cfg.get('work_attachment', '—')}",
+                f"安全配置：{'、'.join(cfg.get('safety_package') or []) or '—'}",
+                f"数据来源：{m.get('source_name')}（{m.get('data_origin')}）",
+                f"来源链接：{m.get('source_url')}",
+                "口径说明：规格为公开产品页数据；选配项与出厂日期为仿真补充，需厂商确认。",
+            ]
+        )
+        n += rag.index_entry(db, "equipment", f"设备型号档案：{m.get('model_name')}", content,
+                             tags=f"设备,型号,{m.get('equipment_subtype')},规格参数",
+                             source=m.get("source_url") or m.get("source_name") or "unified_corpus",
+                             version="V1.0")
+    stats["equipment_model"] = n
+
+    # 2) 价格与 TCO
+    n = 0
+    for p in by_type.get("equipment_price_tco", []):
+        content = "。".join(
+            [
+                f"型号：{p.get('model_name')}（{p.get('equipment_subtype')}）",
+                f"购置价：{float(p.get('purchase_price_cny') or 0):,.0f} 元",
+                f"能源类型：{p.get('energy_type')}；能源成本：{float(p.get('energy_cost_per_hour_cny') or 0):.2f} 元/小时",
+                f"维保成本：{float(p.get('maintenance_cost_per_hour_cny') or 0):.2f} 元/小时",
+                f"三年残值率：{float(p.get('residual_value_rate_3y') or 0):.2f}",
+                f"年作业小时：{float(p.get('annual_operation_hours') or 0):.0f} 小时",
+                f"三年 TCO：{float(p.get('three_year_tco_cny') or 0):,.0f} 元",
+                f"口径：{p.get('source_name')}",
+                "数据边界：整机售价为公开渠道未披露项，价格按子类型市场区间构造，报价需厂商确认。",
+            ]
+        )
+        n += rag.index_entry(db, "price", f"价格与三年 TCO：{p.get('model_name')}", content,
+                             tags="价格,TCO,购置,能耗,维保,残值",
+                             source=p.get("source_name") or "unified_corpus", version="V1.0")
+    stats["equipment_price_tco"] = n
+
+    # 3) 故障案例
+    n = 0
+    for c in by_type.get("fault_case", []):
+        content = "。".join(
+            [
+                f"故障码：{c.get('fault_code')}（{c.get('fault_type')}）",
+                f"适用设备：{c.get('equipment_subtype')}",
+                f"异常部件：{c.get('abnormal_part')}",
+                f"根因：{c.get('root_cause')}",
+                f"严重度：{c.get('severity')}；预计停机：{float(c.get('estimated_downtime_hours') or 0):.0f} 小时",
+                f"保养间隔：{c.get('maintenance_interval_hours')} 小时",
+                "维修步骤：" + " → ".join(c.get("repair_steps") or []),
+                "推荐备件：" + "、".join(c.get("recommended_parts") or []),
+                f"口径：{c.get('source_name')}",
+            ]
+        )
+        n += rag.index_entry(db, "maintenance", f"故障案例：{c.get('case_id')} {c.get('fault_code')} {c.get('fault_type')}",
+                             content, tags=f"故障,维修,{c.get('equipment_subtype')},{c.get('fault_code')}",
+                             source=c.get("source_name") or "unified_corpus", version="V1.0")
+    stats["fault_case"] = n
+
+    # 4) 方案模板（同类型多条记录内容重复，按模板类型去重后入库）
+    seen: set[str] = set()
+    n = 0
+    for t in by_type.get("project_template", []):
+        ttype = str(t.get("template_type"))
+        if ttype in seen:
+            continue
+        seen.add(ttype)
+        chapters = t.get("chapters") or []
+        content = "。".join(
+            [
+                f"模板类型：{ttype}",
+                "章节结构：" + "；".join(
+                    f"{ch.get('order')}. {ch.get('name')}（需填字段：{'、'.join(ch.get('required_fields') or [])}）"
+                    for ch in chapters
+                ),
+                f"口径：{t.get('source_name')}",
+            ]
+        )
+        n += rag.index_entry(db, "template", f"方案模板：{ttype}", content,
+                             tags=f"模板,方案,{ttype}", source=t.get("source_name") or "unified_corpus",
+                             version="V1.0")
+    stats["project_template"] = n
+    stats["project_template_types"] = len(seen)
+
+    # 5) 客户与合同域
+    contracts = {str(c.get("customer_id")): c for c in by_type.get("customer_contract", [])}
+    n = 0
+    for c in by_type.get("customer", []):
+        con = contracts.get(str(c.get("customer_id")), {})
+        content = "。".join(
+            [
+                f"客户名称：{c.get('customer_name')}",
+                f"行业：{c.get('industry')}；服务等级：{c.get('service_level')}",
+                f"联系人：{c.get('contact_person')}",
+                f"设备清单：{'、'.join(c.get('equipment_inventory') or [])}",
+                f"服务合同：{con.get('contract_name', '—')}；合同金额：{float(con.get('contract_amount_cny') or 0):,.0f} 元",
+                f"合同期：{con.get('contract_start', '—')} ~ {con.get('contract_end', '—')}",
+                f"口径：{c.get('source_name')}",
+                "数据边界：客户与合同为仿真数据（公开资料无可复用客户清单），不得作为真实客户信息引用。",
+            ]
+        )
+        n += rag.index_entry(db, "customer", f"客户档案：{c.get('customer_name')}", content,
+                             tags=f"客户,合同,{c.get('industry')},设备清单",
+                             source=c.get("source_name") or "unified_corpus", version="V1.0")
+    stats["customer"] = n
+
+    stats["eval_qa_excluded"] = len(by_type.get("evaluation_qa", []))
+    return stats
+
+
+def rebuild_all_knowledge(db: Session) -> dict:
+    """整体重建知识库：清空既有条目与向量 → 五大库 + 全域语料重新入库。"""
+    from backend.app.models.knowledge import KnowledgeEntry
+    from backend.app.services.vectorstore import vector_store
+
+    cleared_kb = db.query(KnowledgeEntry).delete()
+    db.commit()
+    try:
+        cleared_vec = vector_store.get().reset()
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("向量库清空失败（将覆盖写入）：%s", exc)
+        cleared_vec = 0
+    stats = build_all_knowledge(db)
+    stats["cleared_kb_entries"] = int(cleared_kb)
+    stats["cleared_vectors"] = int(cleared_vec)
+    stats["unified_corpus"] = index_unified_corpus(db)
+    stats["vector_entries"] = vector_store_count()
+    return stats
 
 
 def build_all_knowledge(db: Session) -> dict:

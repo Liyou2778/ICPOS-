@@ -21,12 +21,21 @@ from backend.app.core.config import settings
 MODEL_DIR = settings.repo_root / "data" / "models" / "project"
 FORBIDDEN_FEATURES = ("actual_start", "actual_end", "status", "delay", "progress")
 
+# 说明：项目运营模型产物（data/models/project）已按"以新全域语料重建训练"的计划清除，
+# 并备份到 data/_backup_*/project/；旧项目语料管线已被
+# scripts.ingest_unified_corpus + scripts.train_ops_models 取代（新产物 data/models/ops）。
+# 本文件保留用例，产物缺失时显式跳过；重跑旧管线即可恢复覆盖。
+RETIRED_REASON = (
+    "项目运营模型产物已清除（备份于 data/_backup_*/project/）：当前训练链路为 "
+    "scripts.ingest_unified_corpus + scripts.train_ops_models（产物 data/models/ops）"
+)
+
 
 @pytest.fixture(scope="module")
 def report() -> dict:
     f = MODEL_DIR / "eval_report.json"
     if not f.exists():
-        pytest.skip("模型产物缺失：请先执行 python -m scripts.train_project_models")
+        pytest.skip(RETIRED_REASON)
     return json.loads(f.read_text(encoding="utf-8"))
 
 
@@ -34,11 +43,13 @@ def report() -> dict:
 def baseline() -> dict:
     f = MODEL_DIR / "baseline_model.json"
     if not f.exists():
-        pytest.skip("基准文件缺失：请先执行 python -m scripts.train_project_models")
+        pytest.skip(RETIRED_REASON)
     return json.loads(f.read_text(encoding="utf-8"))
 
 
 def test_artifacts_exist_and_loadable():
+    if not (MODEL_DIR / "eval_report.json").exists():
+        pytest.skip(RETIRED_REASON)
     for name in (
         "task_delay_reg.joblib",
         "task_delay_clf.joblib",

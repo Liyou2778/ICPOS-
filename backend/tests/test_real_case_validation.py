@@ -60,6 +60,22 @@ def test_total_volume_divided_by_duration():
     assert req.budget_cny == 7.8e9
 
 
+def test_tender_total_volume_phrasing():
+    """招标原件写法'剥离总量 17239.2 万立方米 + 工期 5 年'同样必须按总量折算。
+
+    该措辞来自白音华一标段资格预审公告原文（真实招标文件用词），
+    此前解析器只认'总工程量/工程量'，会把 5 年总量当成一年产量（差 5 倍）。
+    """
+    req = parse_requirement(
+        "白音华露天矿 2026—2030 年剥离工程一标段（5 年），剥离总量 17239.2 万立方米，"
+        "露天煤矿土岩剥离的采装、运输、排卸，工期 5 年，加权运距 4.37 千米"
+    )
+    total_m3 = 17239.2 * 1e4
+    assert req.total_t == pytest.approx(total_m3 * 2.6, rel=1e-6)
+    assert req.annual_t == pytest.approx(total_m3 * 2.6 / 5, rel=1e-6)
+    assert req.duration_years == 5.0
+
+
 def test_annual_volume_still_scales_to_total():
     """年产量口径行为不变：总量 = 年产量 × 工期。"""
     req = parse_requirement("年产 200 万吨矿石，工期 3 年，预算 1.5 亿元，露天煤矿")
@@ -160,6 +176,8 @@ def test_real_case_dataset_integrity():
         "industry_media",
         "secondary",
         "industry_media + secondary",
+        # 招标原件全文转载（权威原文位于需注册/会员的平台，转载页内容详实且内部自洽）
+        "tender_aggregator_fulltext",
     }
     for case in data["cases"]:
         for field in (
@@ -189,19 +207,30 @@ def test_real_case_dataset_integrity():
             assert case["requirement"].get("budget_cny") is None, (
                 f"{case['id']} 预算未披露却填了具体值（禁止用测试值充当公告字段）"
             )
-        # 探针文本不得篡改公告数字：关键数字必须能在文本中找到
+        # 探针文本不得篡改公告数字：**仅对公告披露（published）的槽位**做文本强校验；
+        # 派生值（derived，如总量 ÷ 工期）与未披露值不做文本比对——由 provenance 显式声明口径，
+        # 避免把"派生数字"当成"公告原文数字"对外表述。
         text = case["agent_probe_text"]
-        for key, digits in (
-            ("annual_m3", (8.88, 806)),
-            ("duration_years", (5, 12)),
-            ("budget_cny", (78, 2800, 1800)),
-        ):
-            val = case["requirement"].get(key)
-            if val:
-                if key == "annual_m3":
-                    assert any(str(d) in text for d in digits if d in (8.88, 806)), case["id"]
-                if key == "budget_cny":
-                    assert any(str(d) in text for d in digits if d in (78, 2800, 1800)), case["id"]
+
+        def _cands(value: float, unit: str) -> list[str]:
+            if unit == "m3":
+                return [f"{value:,.0f}", f"{value:.0f}", f"{value / 1e4:g}", f"{value / 1e8:g}"]
+            if unit == "cny":
+                return [f"{value / 1e8:g}", f"{value / 1e4:g}", f"{value:.0f}"]
+            return [f"{value:g}"]
+
+        for slot, unit in (("annual_m3", "m3"), ("duration_years", "year"), ("budget_cny", "cny")):
+            key = {"annual_m3": "annual", "duration_years": "duration", "budget_cny": "budget"}[slot]
+            if prov[key].startswith("not_published"):
+                assert case["requirement"].get(slot) is None, f"{case['id']}.{slot} 未披露却填了值"
+                continue
+            if prov[key].startswith("published"):
+                value = case["requirement"].get(slot)
+                assert value is not None, f"{case['id']}.{slot} 标注已披露但值为空"
+                cands = _cands(float(value), unit)
+                assert any(c in text for c in cands), (
+                    f"{case['id']} 探针文本未包含公告披露的 {slot}={value}（候选 {cands}）"
+                )
 
 
 def test_validation_report_gates_all_pass():
@@ -216,3 +245,32 @@ def test_validation_report_gates_all_pass():
     assert s["scale_honesty_pass"] == s["scale_honesty_applicable"], f"规模诚实性未全通过：{s}"
     for r in rep["results"]:
         assert r["source_url"].startswith("http"), f"{r['id']} 缺少可溯源链接"
+
+
+def test_mandatory_spec_check_is_wired_and_gap_disclosed():
+    """业主硬性门槛校验必须已接入，且当前的能力缺口必须在报告中公开披露。
+
+    说明：招标文件门槛不满足即不响应（废标）。当前参数库最大挖掘机 6 m³ < 真实标段要求的 7 m³，
+    产品尚未实现"硬性门槛校验与无适配机型提示"——本用例的作用是**锁定这个缺口已被公开记录**，
+    避免文档说"已满足招标要求"而系统实际会推荐不合规机型。修复该功能后本用例需同步更新。
+    """
+    data = json.loads(CASES.read_text(encoding="utf-8"))
+    tender_cases = [c for c in data["cases"] if c["requirement"].get("owner_mandatory_specs")]
+    assert tender_cases, "验证集必须包含带业主强制设备门槛的招标原件案例"
+    specs = tender_cases[0]["requirement"]["owner_mandatory_specs"]
+    assert specs["excavator"]["bucket_m3_min"] >= 7, "该案例门槛记录有误"
+
+    if not REPORT.exists():
+        pytest.skip("验证报告不存在")
+    rep = json.loads(REPORT.read_text(encoding="utf-8"))
+    s = rep["summary"]
+    assert "mandatory_specs_applicable" in s, "报告缺少硬性门槛校验维度"
+    assert s["mandatory_specs_applicable"] >= 1, "硬性门槛校验未对任何案例生效"
+    if s["mandatory_specs_pass"] < s["mandatory_specs_applicable"]:
+        # 缺口存在 → 必须在交付文档中公开，且违规明细可查
+        assert s["mandatory_specs_violations"], "存在门槛违规却未记录明细"
+        doc = (settings.repo_root / "docs" / "validation" / "agent_real_case_validation.md").read_text(
+            encoding="utf-8"
+        )
+        assert "硬性门槛" in doc, "能力缺口未在验证报告中公开"
+        assert "7 m³" in doc or "7 m3" in doc, "报告中未写明具体门槛数值"
