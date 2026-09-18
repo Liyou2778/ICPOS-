@@ -170,7 +170,23 @@ def train(
     trainer = Trainer(model=model, args=args, train_dataset=ds, data_collator=collator)
 
     t0 = time.perf_counter()
-    result = trainer.train()
+    try:
+        result = trainer.train()
+    except RuntimeError as exc:
+        if "out of memory" in str(exc).lower():
+            free_gib = total_gib = 0.0
+            try:
+                free_bytes, total_bytes = torch.cuda.mem_get_info()
+                free_gib, total_gib = free_bytes / 1024**3, total_bytes / 1024**3
+            except Exception:  # noqa: BLE001
+                pass
+            raise SystemExit(
+                f"[显存不足] 训练中断：{exc}\n"
+                f"  当前显存可用 {free_gib:.2f}/{total_gib:.2f} GiB。"
+                f"请关闭占用显存的程序（本机实测 Unity Editor / 浏览器 / 壁纸引擎可占 3~4 GiB），"
+                f"或用更小配置重试：--max-len 384 --limit 2000"
+            ) from exc
+        raise
     elapsed = time.perf_counter() - t0
 
     adapter_dir = OUT / "adapter"

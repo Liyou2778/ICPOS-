@@ -9,6 +9,7 @@
 
 from __future__ import annotations
 
+import math
 import re
 from dataclasses import dataclass, field
 
@@ -141,23 +142,62 @@ def index_entry(
 
 def _keyword_candidates(
     db: Session, query: str, kb_type: str | None = None, limit: int = 60
-) -> dict[int, int]:
-    """关键词（LIKE 中文 2-gram 词）召回：entry_id -> 命中次数。"""
+) -> dict[int, float]:
+    """关键词召回（IDF 加权 + 故障码/型号精确加权）：entry_id -> 相关性得分。
+
+    改进背景（由真实案例评测发现）：原实现只用中文 2-gram 匹配，
+    "E110故障代码对应什么故障" 里的 **E110 被切成 "E1/11/10"**，导致故障码从未作为检索词，
+    "故障" 这类高频词主导打分 → 检索到错误故障码条目（如 E108/E111）。
+    现改为：① 抽出代码/型号 token 单独匹配；② 按文档频率做 IDF 加权（高频词降权）；
+    ③ 精确代码命中强加权，使"问哪个码就取哪条"。
+    """
     q = db.query(KnowledgeEntry)
     if kb_type:
         q = q.filter(KnowledgeEntry.kb_type == kb_type)
     q = q.limit(500)
     rows = q.all()
     terms = [t for t in _terms(query) if len(t) >= 2]
-    scores: dict[int, int] = {}
+    codes = query_codes(query)
+
+    # 文档频率 → IDF
+    df: dict[str, int] = {}
+    texts: dict[int, str] = {}
     for row in rows:
-        n = 0
+        text = f"{row.title} {row.content} {row.tags}"
+        texts[row.id] = text
         for t in terms:
-            if t in row.title or t in row.content or t in row.tags:
-                n += 1
-        if n:
-            scores[row.id] = n
+            if t in text:
+                df[t] = df.get(t, 0) + 1
+    n_docs = max(len(rows), 1)
+
+    scores: dict[int, float] = {}
+    for row in rows:
+        text = texts[row.id]
+        s = 0.0
+        for t in terms:
+            if t in text:
+                s += math.log((n_docs + 1) / (df.get(t, 0) + 1)) + 1.0
+        if codes:
+            upper = text.upper()
+            for c in codes:
+                if c in upper:
+                    s += 3.0  # 精确命中的代码/型号：强加权
+        if s > 0:
+            scores[row.id] = s
     return scores
+
+
+CODE_RE = re.compile(r"[A-Za-z]{1,5}\d{2,12}[A-Za-z]*|\d{3,5}[A-Za-z]{1,4}")
+
+
+def query_codes(query: str) -> list[str]:
+    """抽取查询中的故障码/型号类 token（如 E110、XE700EV、XDY1000、WO-20260914）。"""
+    out: list[str] = []
+    for m in CODE_RE.finditer(query or ""):
+        token = m.group(0).upper()
+        if token not in out:
+            out.append(token)
+    return out
 
 
 def _terms(query: str) -> list[str]:
@@ -200,6 +240,7 @@ def hybrid_search(
     rows = db.query(KnowledgeEntry).filter(KnowledgeEntry.id.in_(cand_ids)).all()
     by_id = {r.id: r for r in rows}
     kw_max = max(kw_scores.values()) if kw_scores else 1.0
+    codes = query_codes(query)
     combined: list[tuple[float, KnowledgeEntry]] = []
     for eid in cand_ids:
         row = by_id.get(eid)
@@ -207,7 +248,15 @@ def hybrid_search(
             continue
         vec_n = vec_scores.get(eid, 0.0)
         kw_n = kw_scores.get(eid, 0) / kw_max
-        combined.append((0.6 * vec_n + 0.4 * kw_n, row))
+        score = 0.6 * vec_n + 0.4 * kw_n
+        # 精确 token 优先规则：查询里出现故障码/型号时，"包含该 token" 的条目必须压过
+        # 仅靠弱向量分相邻的条目（否则 E106 会被 E107 挤掉：E106 只拿到关键词分 0.4，
+        # 而 E107 靠 0.14 的向量分 + 0.27 关键词分 = 0.41）。结构化精确匹配优先于模糊相似度。
+        if codes:
+            text = f"{row.title} {row.content} {row.tags}".upper()
+            if any(c in text for c in codes):
+                score += 0.5
+        combined.append((score, row))
     combined.sort(key=lambda x: -x[0])
 
     hits: list[RAGHit] = []

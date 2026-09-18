@@ -84,24 +84,30 @@ def main() -> int:
     ap.add_argument("--limit", type=int, default=120)
     ap.add_argument("--max-new-tokens", type=int, default=220)
     ap.add_argument("--top-k", type=int, default=3)
+    ap.add_argument("--dry-run", action="store_true",
+                    help="不加载模型：只跑检索并直接把【资料】当答案打分，得到'检索上界'基线")
     args = ap.parse_args()
 
     os.environ.setdefault("HF_ENDPOINT", "https://hf-mirror.com")
-    import torch
-    from transformers import AutoModelForCausalLM, AutoTokenizer
+    tok = None
+    model = None
+    if not args.dry_run:
+        import torch
+        from transformers import AutoModelForCausalLM, AutoTokenizer
 
-    OUT.mkdir(parents=True, exist_ok=True)
-    tok = AutoTokenizer.from_pretrained(args.base)
-    model = AutoModelForCausalLM.from_pretrained(
-        args.base,
-        torch_dtype=torch.bfloat16 if torch.cuda.is_bf16_supported() else torch.float16,
-        device_map={"": 0},
-    )
-    if args.adapter:
-        from peft import PeftModel
+        tok = AutoTokenizer.from_pretrained(args.base)
+        model = AutoModelForCausalLM.from_pretrained(
+            args.base,
+            torch_dtype=torch.bfloat16 if torch.cuda.is_bf16_supported() else torch.float16,
+            device_map={"": 0},
+        )
+        if args.adapter:
+            from peft import PeftModel
 
-        model = PeftModel.from_pretrained(model, args.adapter)
-    model.eval()
+            model = PeftModel.from_pretrained(model, args.adapter)
+        model.eval()
+    else:
+        print("  [dry-run] 不加载模型：输出为检索资料本身（用于测量检索上界与校验打分链路）")
 
     corpus = _load_jsonl(SFT / "agent_eval_corpus.jsonl")
     # 外部评测集（真实案例/招标门槛）用于系统级端到端评测，此处仅校验其存在与条数
@@ -123,12 +129,16 @@ def main() -> int:
                 other = rng.choice(corpus)["question"]
                 ctx, cits = build_context(db, other, args.top_k)
             user = f"问题：{item['question']}\n【资料】\n{ctx}"
-            msgs = [{"role": "system", "content": SYSTEM}, {"role": "user", "content": user}]
-            prompt = tok.apply_chat_template(msgs, tokenize=False, add_generation_prompt=True)
-            inputs = tok(prompt, return_tensors="pt", truncation=True, max_length=2048).to(model.device)
-            with torch.no_grad():
-                out = model.generate(**inputs, max_new_tokens=args.max_new_tokens, do_sample=False)
-            pred = tok.decode(out[0][inputs["input_ids"].shape[1] :], skip_special_tokens=True)
+            if args.dry_run:
+                pred = ctx  # 检索上界：直接把资料当答案
+            else:
+                msgs = [{"role": "system", "content": SYSTEM}, {"role": "user", "content": user}]
+                prompt = tok.apply_chat_template(msgs, tokenize=False, add_generation_prompt=True)
+                inputs = tok(prompt, return_tensors="pt", truncation=True, max_length=2048).to(
+                    model.device)
+                with torch.no_grad():
+                    out = model.generate(**inputs, max_new_tokens=args.max_new_tokens, do_sample=False)
+                pred = tok.decode(out[0][inputs["input_ids"].shape[1] :], skip_special_tokens=True)
             exp = item["expected_answer"]
             exp_nums, pred_nums = _numbers(exp), _numbers(pred)
             num_hit = (len(exp_nums & pred_nums) / len(exp_nums)) if exp_nums else None
